@@ -41,8 +41,8 @@ doesn't call AniDB at all:
 - [x] `anime-list-master.xml` parser + ingest (`src/mapping/xml-parser.ts`,
       `src/mapping/ingest.ts`) -- primary source, owns tvdb/tmdb ids,
       season/offset, and the per-episode mapping-list overrides
-- [x] The season-offset / mapping-list resolver (`src/mapping/resolver.ts`)
-      -- **tested against real data**, see below
+- [x] The season-offset / mapping-list resolver, forward AND reverse
+      (`src/mapping/resolver.ts`) -- **tested against real data**, see below
 - [x] Fribb-format JSON cross-reference (`src/mapping/fribb.ts`) -- backfills
       anilist/mal/kitsu/livechart/anisearch/anime-planet/ann/animecountdown/
       simkl ids + type. Never touches tvdb/tmdb/season/offset -- those stay
@@ -54,13 +54,22 @@ doesn't call AniDB at all:
 - [x] `POST /indexer/mapping/refresh`, `/mapping/fribb-refresh`,
       `/mapping/lists-refresh` -- admin-key gated
 - [x] Render free-tier keep-alive (`src/helpers/self-poll.ts`)
-- [ ] **Open problem:** a reliable total episode count for shows that
-      AREN'T currently airing. `anime-airing.json` only covers the ~300
-      shows airing right now (`episodeProgress` there is "aired so far",
-      not a final count). Nothing wired up yet sources a total for the
-      other ~16,500 -- AniList's public GraphQL API (`Media.episodes`) is
-      the likely answer, not yet built pending a decision on whether to add
-      that live dependency.
+- [ ] **Open problem, split in two:**
+      - For the **7,465 anime with a TVDB mapping**: solved, no external
+        episode count needed. `reverseResolveRegular()` in resolver.ts
+        inverts the same offset/mapping-list math, so once the TVDB fetcher
+        exists, its own episode list is self-terminating -- verified by a
+        round-trip test across all 430,332 unambiguous real episodes (879
+        destinations are genuinely ambiguous in the *source* mapping data
+        itself -- e.g. Ghost in the Shell explicitly maps six different
+        AniDB catalog entries to the same one TVDB episode -- and are
+        excluded from that count rather than miscounted as passing).
+      - For the **9,400 anime with NO TVDB mapping (56% of the catalog)**:
+        still unsolved. There's no episode data source for these at all
+        right now -- `anime-airing.json` only covers the ~300 shows airing
+        this moment. Whether that's acceptable (mapping-only, no episode
+        list, for over half the catalog) or worth adding AniList's
+        `Media.episodes` for is an open product decision, not yet made.
 - [ ] TVDB episode fetcher + cache (token refresh)
 - [ ] Merge engine (resolver + TVDB cache + episode count -> `anime.data`)
 - [ ] `/indexer/tvdb/*`, `/indexer/merge/run` routes

@@ -102,3 +102,52 @@ export function resolveEpisode(row: MappingRow, ep: AnidbEpisodeRef, target: Pro
   // 5. nothing matched
   return { mode: 'unmapped' };
 }
+
+/**
+ * Inverts resolveEpisode(): given a real (season, episode) TVDB actually
+ * has, returns the canonical regular-episode number it corresponds to.
+ *
+ * This is what lets episode enumeration be driven by TVDB's own (already
+ * fetched) episode list instead of needing a separately-sourced total
+ * episode count -- TVDB's episode list is self-terminating, so there's
+ * nothing left to ask AniList (or anywhere else) for on a mapped show.
+ *
+ * Scoped to regular episodes (mirrors resolveEpisode's season===1 case) --
+ * specials aren't reversed here for the same reason they aren't resolved
+ * forward without AniDB's own numbering, see README.
+ *
+ * Absolute-numbered shows (tvdbAbsolute/tmdbAbsolute) aren't handled here:
+ * TVDB's own episode objects carry an `absoluteNumber` field directly, so
+ * for those shows the canonical number IS that field, no arithmetic (or
+ * this function) needed once the TVDB client exists.
+ */
+export function reverseResolveRegular(row: MappingRow, tvdbEp: { season: number; number: number }, target: Provider): number | null {
+  const relevantEntries = row.mappingList.filter((entry) => {
+    const entrySeason = target === 'tvdb' ? entry.tvdbSeason : entry.tmdbSeason;
+    return entry.anidbSeason === 1 && entrySeason === tvdbEp.season;
+  });
+
+  for (const entry of relevantEntries) {
+    // invert an explicit override: find the anidb episode whose explicit
+    // list *contains* this destination episode (not just equals it --
+    // combined-episode entries like ";1-1+2;" mean episode 1 spans BOTH
+    // destination episodes 1 and 2, and either one must reverse to 1)
+    if (entry.explicit) {
+      for (const [anidbNumStr, dsts] of Object.entries(entry.explicit)) {
+        if (dsts.includes(tvdbEp.number)) return Number(anidbNumStr);
+      }
+    }
+    // invert a range+offset rule
+    if (entry.start !== undefined && entry.end !== undefined) {
+      const candidate = tvdbEp.number - (entry.offset ?? 0);
+      if (candidate >= entry.start && candidate <= entry.end) return candidate;
+    }
+  }
+
+  // invert the anime-level default season + offset
+  const { defaultSeason, offset } = seasonForTarget(row, target);
+  if (defaultSeason === tvdbEp.season) return tvdbEp.number - offset;
+
+  return null; // this TVDB episode isn't a mapped regular episode
+}
+

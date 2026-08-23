@@ -1,5 +1,5 @@
 import { parseAnimeListXmlFile } from '../src/mapping/xml-parser.js';
-import { resolveEpisode, type ResolvedEpisode } from '../src/mapping/resolver.js';
+import { resolveEpisode, reverseResolveRegular, type ResolvedEpisode } from '../src/mapping/resolver.js';
 
 const rows = parseAnimeListXmlFile(new URL('./anime-list-master.sample.xml', import.meta.url).pathname);
 const byId = new Map(rows.map((r) => [r.anidbId, r]));
@@ -112,6 +112,78 @@ console.log(`Parsed ${rows.length} anime from anime-list-master.xml\n`);
   check('ep25 -> outside every range, falls to absolute', resolveEpisode(row, { season: 1, number: 25 }, 'tvdb'), {
     mode: 'absolute', anidbNumber: 25
   });
+}
+
+// --- Round-trip property, across the WHOLE real catalog -----------------
+// For every anime and every regular episode 1..30, whatever resolveEpisode
+// maps it to, reverseResolveRegular should map straight back to the
+// original number -- UNLESS multiple different anidb numbers were
+// explicitly mapped to the exact same destination in the source data
+// itself (real example: Ghost in the Shell, anidbId=61, maps six different
+// catalog entries to the same single TVDB episode -- see mapping-list
+// above). That's genuine information loss in anime-lists-xml, not
+// something reverseResolveRegular can recover -- so those destinations are
+// tracked separately rather than treated as failures.
+{
+  console.log('Round-trip property (resolveEpisode -> reverseResolveRegular) across all 16,865 real entries');
+
+  // first pass: find every destination more than one n forward-resolves to.
+  // Sweeps 1..30 (covers ordinary regular numbering) PLUS every number that
+  // actually appears as an explicit mapping-list key on that row (covers
+  // the Dragon Ball Z Gaiden case: explicit keys 401/402/403 coexist with a
+  // default-offset rule that ALSO lands on the same destination for n=1/2 --
+  // a genuine collision in the source data that a fixed 1..30 sweep alone
+  // would miss entirely, since 401+ is outside that range).
+  const destinationSources = new Map<string, Set<number>>(); // "anidbId|target|season|episode" -> {n, n, ...}
+  for (const row of rows) {
+    const explicitKeys = new Set<number>();
+    for (const entry of row.mappingList) {
+      if (entry.explicit) for (const k of Object.keys(entry.explicit)) explicitKeys.add(Number(k));
+    }
+    const candidates = new Set([...Array.from({ length: 30 }, (_, i) => i + 1), ...explicitKeys]);
+
+    for (const target of ['tvdb', 'tmdb'] as const) {
+      for (const n of candidates) {
+        const forward = resolveEpisode(row, { season: 1, number: n }, target);
+        if (forward.mode !== 'season-episode') continue;
+        for (const ep of forward.episodes) {
+          const key = `${row.anidbId}|${target}|${forward.season}|${ep}`;
+          if (!destinationSources.has(key)) destinationSources.set(key, new Set());
+          destinationSources.get(key)!.add(n);
+        }
+      }
+    }
+  }
+  const ambiguousDestinations = [...destinationSources.values()].filter((s) => s.size > 1).length;
+  const uniqueDestinations = destinationSources.size - ambiguousDestinations;
+
+  // second pass: round-trip only the unambiguous destinations, still using
+  // the same 1..30 sweep as the actual regression check (that's the space
+  // reverseResolveRegular is meant to cover in practice)
+  let checked = 0;
+  let mismatches = 0;
+  for (const row of rows) {
+    for (const target of ['tvdb', 'tmdb'] as const) {
+      for (let n = 1; n <= 30; n++) {
+        const forward = resolveEpisode(row, { season: 1, number: n }, target);
+        if (forward.mode !== 'season-episode') continue;
+        for (const ep of forward.episodes) {
+          const key = `${row.anidbId}|${target}|${forward.season}|${ep}`;
+          if (destinationSources.get(key)!.size > 1) continue; // known-ambiguous, skip
+          checked++;
+          const back = reverseResolveRegular(row, { season: forward.season, number: ep }, target);
+          if (back !== n) {
+            mismatches++;
+            if (mismatches <= 8) {
+              console.log(`  MISMATCH anidbId=${row.anidbId} n=${n} target=${target} -> forward ${JSON.stringify(forward)} -> back ${back}`);
+            }
+          }
+        }
+      }
+    }
+  }
+  console.log(`  ${uniqueDestinations} unique destinations, ${ambiguousDestinations} ambiguous (multiple anidb numbers -> same destination in the source data, e.g. Ghost in the Shell)`);
+  check(`round-trip holds across all ${checked} unambiguous real episodes`, mismatches, 0);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

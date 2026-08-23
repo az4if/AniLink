@@ -1,4 +1,4 @@
-import { pgTable, integer, text, jsonb, boolean, timestamp, date, primaryKey } from 'drizzle-orm/pg-core';
+import { pgTable, integer, text, jsonb, boolean, timestamp } from 'drizzle-orm/pg-core';
 
 /**
  * Source-of-truth mapping, one row per AniDB anime (~16,865 once fully seeded).
@@ -11,6 +11,12 @@ export const mapping = pgTable('mapping', {
   malId: integer('mal_id'),
   anilistId: integer('anilist_id'),
   kitsuId: integer('kitsu_id'),
+  livechartId: integer('livechart_id'),
+  anisearchId: integer('anisearch_id'),
+  animePlanetId: text('anime_planet_id'), // slug, not numeric -- e.g. "cowboy-bebop"
+  animeNewsNetworkId: integer('animenewsnetwork_id'),
+  animeCountdownId: integer('animecountdown_id'),
+  simklId: integer('simkl_id'),
 
   tvdbId: integer('tvdb_id'),
   tmdbTvId: integer('tmdb_tv_id'),
@@ -18,6 +24,16 @@ export const mapping = pgTable('mapping', {
   imdbIds: text('imdb_ids').array(),
 
   type: text('type'), // TV | MOVIE | OVA | ONA | SPECIAL | HENTAI | UNKNOWN
+
+  // from lists-main's anime-airing.json -- a live snapshot of currently-airing
+  // shows only. episodeProgress is "episodes aired so far" (nextEpisode - 1),
+  // NOT a final/total episode count -- it goes stale the moment a show
+  // finishes airing, and says nothing about shows that were never airing
+  // during a given ingest run. Getting a reliable total for finished shows
+  // is still an open problem, see README.
+  airing: boolean('airing').notNull().default(false),
+  episodeProgress: integer('episode_progress'),
+  nextEpisodeAt: timestamp('next_episode_at', { withTimezone: true }),
 
   // simple offset model -- used when no per-episode override applies.
   // defaulttvdbseason/tmdbseason in the source XML is USUALLY an integer but
@@ -55,17 +71,11 @@ export type MappingListEntry = {
   explicit?: Record<number, number[]>;
 };
 
-/** Raw AniDB episode-list cache, so we don't re-scrape a show that hasn't changed. */
-export const anidbCache = pgTable('anidb_cache', {
-  anidbId: integer('anidb_id').primaryKey().references(() => mapping.anidbId),
-  rawData: jsonb('raw_data'),
-  status: text('status'), // ongoing | ended | unknown
-  startDate: date('start_date'),
-  endDate: date('end_date'),
-  lastScrapedAt: timestamp('last_scraped_at', { withTimezone: true })
-});
-
-/** Raw TVDB series/episode cache. */
+/**
+ * Raw TVDB series/episode cache. This is now the canonical episode data
+ * source (not just enrichment) -- see README for why AniDB's live API was
+ * dropped from the pipeline.
+ */
 export const tvdbCache = pgTable('tvdb_cache', {
   tvdbId: integer('tvdb_id').primaryKey(),
   rawData: jsonb('raw_data'),

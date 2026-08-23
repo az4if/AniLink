@@ -10,22 +10,60 @@ Runs as a single always-on Node process (Render web service or your own
 machine) -- no serverless, since the indexer needs to run long throttled
 loops that a serverless function would just get killed mid-way through.
 
+## Design decision: no live AniDB API access
+
+AniDB's website (and likely its API subdomain) sits behind Cloudflare, which
+blocks datacenter/cloud IPs by default -- and AniDB's own long-standing
+policy is that its client API isn't meant to be hit from a VPS/cloud server
+anyway, only a residential connection. Rather than fight that, AniLink
+doesn't call AniDB at all:
+
+- IDs (anidb_id, anilist_id, mal_id, tvdb_id, tmdb_id, ...) come from
+  `anime-list-master.xml` + Fribb's JSON + `lists-main` -- all static file
+  downloads, no live AniDB traffic.
+- Episode *count* comes from AniList's public GraphQL API (no auth, no
+  Cloudflare, cloud-host-friendly) or `lists-main` if it's already there.
+- TVDB is canonical for actual episode data (title/overview/image/airdate),
+  not just enrichment. Regular episodes are numbered 1..episodeCount and fed
+  straight into the resolver -- AniDB's own regular-episode numbering is
+  always sequential, so this produces the same result as fetching the list
+  from AniDB directly would have.
+- **Trade-off:** specials/OVA/OP/ED/trailer episodes aren't mappable this
+  way -- those only exist as distinct entries because AniDB assigns them
+  their own S1/T1/O1-style numbers, which is exactly what the
+  `mapping-list` overrides in anime-lists-xml are keyed against. Not
+  supported for v1.
+
 ## What's actually built right now
 
-- [x] Postgres schema (`src/db/schema.ts`) -- `mapping`, `anidb_cache`,
-      `tvdb_cache`, `anime` (final/served), `indexer_state` (resumable cursors)
-- [x] `anime-list-master.xml` parser (`src/mapping/xml-parser.ts`)
+- [x] Postgres schema (`src/db/schema.ts`) -- `mapping`, `tvdb_cache`,
+      `anime` (final/served), `indexer_state` (resumable cursors)
+- [x] `anime-list-master.xml` parser + ingest (`src/mapping/xml-parser.ts`,
+      `src/mapping/ingest.ts`) -- primary source, owns tvdb/tmdb ids,
+      season/offset, and the per-episode mapping-list overrides
 - [x] The season-offset / mapping-list resolver (`src/mapping/resolver.ts`)
       -- **tested against real data**, see below
-- [x] Mapping ingest job + `POST /indexer/mapping/refresh`
+- [x] Fribb-format JSON cross-reference (`src/mapping/fribb.ts`) -- backfills
+      anilist/mal/kitsu/livechart/anisearch/anime-planet/ann/animecountdown/
+      simkl ids + type. Never touches tvdb/tmdb/season/offset -- those stay
+      XML-owned.
+- [x] lists-main cross-reference (`src/mapping/lists.ts`) -- id freshness
+      backfill (fills gaps only, never overwrites Fribb) + currently-airing
+      snapshot (`airing`/`episodeProgress`/`nextEpisodeAt`)
 - [x] `GET /mappings` read API (anidb_id / mal_id / anilist_id / thetvdb_id)
+- [x] `POST /indexer/mapping/refresh`, `/mapping/fribb-refresh`,
+      `/mapping/lists-refresh` -- admin-key gated
 - [x] Render free-tier keep-alive (`src/helpers/self-poll.ts`)
-- [ ] AniDB episode fetcher + cache (rate-limited)
+- [ ] **Open problem:** a reliable total episode count for shows that
+      AREN'T currently airing. `anime-airing.json` only covers the ~300
+      shows airing right now (`episodeProgress` there is "aired so far",
+      not a final count). Nothing wired up yet sources a total for the
+      other ~16,500 -- AniList's public GraphQL API (`Media.episodes`) is
+      the likely answer, not yet built pending a decision on whether to add
+      that live dependency.
 - [ ] TVDB episode fetcher + cache (token refresh)
-- [ ] Merge engine (resolver + both caches -> `anime.data`)
-- [ ] Fribb JSON + lists-main cross-reference (fills `type`, catches
-      brand-new anime before anime-lists-xml has them)
-- [ ] `/indexer/anidb/*`, `/indexer/tvdb/*`, `/indexer/merge/run` routes
+- [ ] Merge engine (resolver + TVDB cache + episode count -> `anime.data`)
+- [ ] `/indexer/tvdb/*`, `/indexer/merge/run` routes
 - [ ] External scheduler wiring (cron-job.org hitting the routes above)
 
 ## Setup
@@ -40,36 +78,63 @@ npm run db:migrate     # applies it -- works against Supabase, Neon,
 npm run dev
 ```
 
-Seed the mapping table (takes a few minutes, no rate limit -- it's one XML
-file):
+Seed the mapping table -- run in this order, since Fribb/lists-main backfill
+onto rows the XML pass creates:
 
 ```bash
-curl -X POST http://localhost:3000/indexer/mapping/refresh \
-  -H "x-admin-key: $ADMIN_KEY"
+curl -X POST http://localhost:3000/indexer/mapping/refresh        -H "x-admin-key: $ADMIN_KEY"
+curl -X POST http://localhost:3000/indexer/mapping/fribb-refresh  -H "x-admin-key: $ADMIN_KEY"
+curl -X POST http://localhost:3000/indexer/mapping/lists-refresh  -H "x-admin-key: $ADMIN_KEY"
 ```
 
-or run it directly without the server: `npm run ingest:mapping`.
+or without the server: `npm run ingest:mapping && npm run ingest:fribb && npm run ingest:lists`.
 
-## Verifying the resolver
+## Sources
+
+All four are static-file downloads, no live scraping, no auth, all
+overridable via env (see `.env.example`):
+
+| Source | Default | Owns |
+|---|---|---|
+| `ANIME_LIST_MASTER_XML_URL` | Anime-Lists/anime-lists `anime-list-master.xml` | tvdb/tmdb ids, season+offset, per-episode mapping-list overrides -- **primary**, run this first |
+| `FRIBB_JSON_URL` | az4if/anime-lists-fribb mirror | anilist/mal/kitsu/livechart/anisearch/anime-planet/ann/animecountdown/simkl ids, `type` |
+| `ANIME_JSON_URL` | anime-and-manga/lists `anime.json` | anilist/mal id, freshness-only (fills gaps Fribb hasn't caught up on yet, never overwrites) |
+| `ANIME_AIRING_JSON_URL` | anime-and-manga/lists `anime-airing.json` | `airing`/`episodeProgress`/`nextEpisodeAt` for currently-airing shows only |
+
+Note on `anime-list-full.xml` (also in the Anime-Lists repo): it's a
+*derived* subset of `anime-list-master.xml` that drops empty entries but
+keeps "unknown" ones, meant for their own scraper tooling. Parsing
+`anime-list-master.xml` directly (what this project does) already gives you
+a superset of it, so there's no reason to also pull `full.xml`.
+
+## Verifying the resolver and the source parsers
 
 The resolver is the piece that actually answers "how do I turn an AniDB
 episode number into a TVDB one" -- so it's tested against real entries
 pulled from `anime-list-master.xml`, not made-up fixtures:
 
 ```bash
-npm test
+npm test              # resolver: 18 assertions against real XML data
+npx tsx test/sources.test.ts   # Fribb + lists-main parsers against real JSON
 ```
 
-Covers: plain offset, explicit per-episode overrides (including one-to-many
-`;1-1+2;` combined episodes), range+offset rules, a show that's entirely
-mapped into TVDB's specials season, and Rizelmine -- which uses absolute
-numbering AND has explicit range overrides that take priority over it. All
-18 assertions currently pass against the real file.
+`test/resolver.test.ts` covers: plain offset, explicit per-episode overrides
+(including one-to-many `;1-1+2;` combined episodes), range+offset rules, a
+show that's entirely mapped into TVDB's specials season, and Rizelmine --
+which uses absolute numbering AND has explicit range overrides that take
+priority over it.
 
-`test/stress.manual.ts` runs every one of the ~16,865 real entries through
-the resolver (both providers, episodes 1-30, both seasons) just to check
-nothing throws. Currently: 0 crashes, 9,400 anime with no TVDB association,
-74 using absolute numbering, 1,428 with per-episode overrides.
+`test/sources.test.ts` covers: Fribb's TV vs MOVIE shape (the latter has
+`themoviedb_id.movie` as an array instead of `themoviedb_id.tv`), that the
+Fribb transform never throws across all ~15,800 real AniDB-matched entries,
+and the airing-snapshot arithmetic (`episodeProgress = nextEpisode - 1`,
+unix-seconds-to-Date conversion) against a real currently-airing entry.
+
+`test/stress.manual.ts` runs every one of the ~16,865 real
+`anime-list-master.xml` entries through the resolver (both providers,
+episodes 1-30, both seasons) just to check nothing throws. Currently: 0
+crashes, 9,400 anime with no TVDB association, 74 using absolute numbering,
+1,428 with per-episode overrides.
 
 ## A note on `type`
 

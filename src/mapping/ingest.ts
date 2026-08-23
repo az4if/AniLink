@@ -1,12 +1,11 @@
 import { sql } from 'drizzle-orm';
+import { Config } from '../config.js';
 import { db, schema } from '../db/index.js';
 import { parseAnimeListXml, type MappingRow } from './xml-parser.js';
 import type { MappingListEntry } from '../db/schema.js';
 
-const XML_URL = 'https://raw.githubusercontent.com/Anime-Lists/anime-lists/master/anime-list-master.xml';
-
 async function downloadXml(): Promise<string> {
-  const res = await fetch(XML_URL);
+  const res = await fetch(Config.sources.animeListMasterXmlUrl);
   if (!res.ok) throw new Error(`Failed to download anime-list-master.xml: HTTP ${res.status}`);
   return res.text();
 }

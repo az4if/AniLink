@@ -169,7 +169,7 @@ overridable via env (see `.env.example`):
 | Source | Default | Owns |
 |---|---|---|
 | `ANIME_LIST_MASTER_XML_URL` | Anime-Lists/anime-lists `anime-list-master.xml` | tvdb/tmdb ids, season+offset, per-episode mapping-list overrides -- **primary**, run this first |
-| `FRIBB_JSON_URL` | az4if/anime-lists-fribb mirror | anilist/mal/kitsu/livechart/anisearch/anime-planet/ann/animecountdown/simkl ids, `type` |
+| `FRIBB_JSON_URL` | Fribb/anime-lists (upstream) | anilist/mal/kitsu/livechart/anisearch/anime-planet/ann/animecountdown/simkl ids, `type` |
 | `ANIME_JSON_URL` | anime-and-manga/lists `anime.json` | anilist/mal id, freshness-only (fills gaps Fribb hasn't caught up on yet, never overwrites) |
 | `ANIME_AIRING_JSON_URL` | anime-and-manga/lists `anime-airing.json` | `airing`/`episodeProgress`/`nextEpisodeAt` for currently-airing shows only |
 

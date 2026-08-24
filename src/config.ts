@@ -34,11 +34,10 @@ export const Config = {
       'https://raw.githubusercontent.com/Anime-Lists/anime-lists/refs/heads/master/anime-list-master.xml',
 
     // Fribb-format mapping JSON (anidb_id -> anilist/mal/kitsu/tvdb/tmdb/...).
-    // az4if's mirror is used by default since it's kept in sync; point this
-    // at the upstream Fribb/anime-lists repo instead if you'd rather.
+    // Upstream Fribb/anime-lists repo.
     fribbJsonUrl:
       process.env.FRIBB_JSON_URL ??
-      'https://raw.githubusercontent.com/az4if/anime-lists-fribb/refs/heads/master/anime-list-full.json',
+      'https://raw.githubusercontent.com/Fribb/anime-lists/refs/heads/master/anime-list-full.json',
 
     // anime-and-manga/lists -- lean {idAL, idAniDB, idMal} triples, updated
     // daily. Used only as a freshness backfill for ids Fribb hasn't caught

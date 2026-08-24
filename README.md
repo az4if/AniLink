@@ -10,6 +10,13 @@ Runs as a single always-on Node process (Render web service or your own
 machine) -- no serverless, since the indexer needs to run long throttled
 loops that a serverless function would just get killed mid-way through.
 
+## Data flow
+
+<p align="center"><img src="docs/anilink_data_flow.svg" alt="AniLink data flow: Anime-list XML, Fribb JSON, and Lists-main JSON feed scheduled Ingest jobs, which write into the Postgres mapping table, which GET /mappings reads live to answer clients."></p>
+
+Three external sources feed scheduled ingest jobs, which write into the
+Postgres `mapping` table, which `GET /mappings` reads live to answer clients.
+
 ## Design decision: no live AniDB API access
 
 AniDB's website (and likely its API subdomain) sits behind Cloudflare, which
@@ -79,7 +86,15 @@ doesn't call AniDB at all:
       and fired every 1ms instead -- the scheduler now ticks on a fixed
       5-minute timer and compares elapsed time in plain arithmetic instead,
       which works for any interval. Regression-tested.
-- [x] Render free-tier keep-alive (`src/helpers/self-poll.ts`)
+- [x] `GET /health` (`src/index.ts`) -- pings the database with a trivial
+      query so an uptime monitor (or the self-poll keep-alive below) can
+      tell "process is up" apart from "process is up but the database
+      connection is dead". Returns `200` with `{status: 'ok', database:
+      'ok', timestamp}` when the db answers, `503` with `status: 'error'`
+      when it doesn't.
+- [x] Render free-tier keep-alive (`src/helpers/self-poll.ts`) -- pings its
+      own `/health` endpoint every 10 minutes so Render's free tier doesn't
+      spin the instance down from inactivity
 - [x] Landing page + live API tester (`public/index.html`)
 - [ ] **Open problem, split in two:**
       - For the **7,465 anime with a TVDB mapping**: solved, no external

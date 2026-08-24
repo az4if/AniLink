@@ -122,6 +122,7 @@
   <div class="brand"><img src="/favicon.png" alt=""> AniLink</div>
   <nav>
     <a href="#try-it">Try it</a>
+    <a href="#endpoint">Endpoint</a>
     <a href="#shape">Response shape</a>
     <a href="#status">Status</a>
   </nav>
@@ -197,12 +198,12 @@
         <input type="text" id="value" value="23" inputmode="numeric" aria-label="id value">
         <button id="send">GET /mappings</button>
       </div>
-      <div class="status-line" id="status">Defaults to anidb_id=23 (Cowboy Bebop).</div>
+      <div class="status-line" id="query-status">Defaults to anidb_id=23 (Cowboy Bebop).</div>
       <pre class="response" id="response">// response appears here</pre>
     </div>
   </section>
 
-  <section>
+  <section id="endpoint">
     <h2>Endpoint</h2>
     <p class="sub">One endpoint, four ways to look a title up. Whichever id you already have works.</p>
     <div class="endpoints">
@@ -273,7 +274,7 @@
   const providerSel = document.getElementById('provider');
   const valueInput = document.getElementById('value');
   const sendBtn = document.getElementById('send');
-  const statusEl = document.getElementById('status');
+  const statusEl = document.getElementById('query-status');
   const responseEl = document.getElementById('response');
 
   async function runQuery(provider, value) {

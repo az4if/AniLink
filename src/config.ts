@@ -19,6 +19,13 @@ export const Config = {
     apiPin: process.env.TVDB_API_PIN ?? ''
   },
 
+  // Delay after each single "ask this provider for one anime's episode
+  // data, get the response, index it" step, before moving to the next id.
+  // Named generically (not TVDB_INDEX_DELAY) since any future per-id
+  // provider loop uses the same sequential-runner.ts and the same knob --
+  // right now that's just TVDB. See sequential-runner.ts.
+  indexDelayMs: Number(process.env.INDEX_DELAY ?? 5) * 1000,
+
   // All static-file mapping sources. Every one is overridable via env so a
   // fork/mirror URL can be swapped in without touching code.
   sources: {
@@ -47,5 +54,21 @@ export const Config = {
       process.env.ANIME_AIRING_JSON_URL ?? 'https://raw.githubusercontent.com/anime-and-manga/lists/main/anime-airing.json'
   },
 
-  adminKey: process.env.ADMIN_KEY ?? 'change-me'
+  adminKey: process.env.ADMIN_KEY ?? 'change-me',
+
+  // In-process scheduler. Off by default -- on a free-tier host that sleeps
+  // when idle, an external pinger (cron-job.org) hitting POST /indexer/*
+  // is more reliable than a timer inside a process that might not be
+  // running when the timer fires. Turn this on for an always-on host
+  // (paid Render, your own machine) if you'd rather not run an external
+  // pinger. Either way, the same jobs go through the same priority queues.
+  scheduler: {
+    enabled: (process.env.ENABLE_SCHEDULER ?? 'false').toLowerCase() === 'true',
+    // "monthly" full mapping resync (anime-list-master.xml)
+    xmlSyncHours: Number(process.env.MAPPING_XML_SYNC_HOURS ?? 24 * 30),
+    // Fribb + lists-main id backfill
+    idsSyncHours: Number(process.env.MAPPING_IDS_SYNC_HOURS ?? 6),
+    // lists-main currently-airing snapshot -- most time-sensitive, shortest interval
+    airingSyncHours: Number(process.env.AIRING_SYNC_HOURS ?? 1)
+  }
 };

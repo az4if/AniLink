@@ -1,6 +1,7 @@
 import { sql, eq } from 'drizzle-orm';
 import { Config } from '../config.js';
 import { db, schema } from '../db/index.js';
+import { runChunked, type YieldCtx } from './chunked-runner.js';
 
 type ListsIdEntry = { idAL?: number; idAniDB?: number; idMal?: number };
 
@@ -27,37 +28,38 @@ async function downloadJson<T>(url: string, label: string): Promise<T> {
  * Backfills anilist_id/mal_id from lists-main's anime.json, but ONLY where
  * this mapping row doesn't already have one -- Fribb's cross-reference is
  * the primary source for these; this just catches anime new enough that
- * Fribb hasn't indexed yet (lists-main updates daily).
+ * Fribb hasn't indexed yet (lists-main updates daily). Resumable/yield-aware,
+ * see chunked-runner.ts.
  */
-export async function ingestListsIds(entries?: ListsIdEntry[]): Promise<{ total: number }> {
+export async function ingestListsIds(entries?: ListsIdEntry[], ctx?: YieldCtx): Promise<{ total: number; added: number[]; done: boolean }> {
   const all = entries ?? (await downloadJson<ListsIdEntry[]>(Config.sources.animeJsonUrl, 'anime.json'));
   const withAnidbId = all.filter((e): e is ListsIdEntry & { idAniDB: number } => typeof e.idAniDB === 'number');
 
-  const CHUNK = 500;
-  for (let i = 0; i < withAnidbId.length; i += CHUNK) {
-    const chunk = withAnidbId.slice(i, i + CHUNK).map((e) => ({
-      anidbId: e.idAniDB,
-      anilistId: e.idAL ?? null,
-      malId: e.idMal ?? null
-    }));
+  const result = await runChunked(
+    'mapping-lists-ids',
+    withAnidbId,
+    500,
+    (e) => e.idAniDB,
+    async (chunk) => {
+      const rows = chunk.map((e) => ({ anidbId: e.idAniDB, anilistId: e.idAL ?? null, malId: e.idMal ?? null }));
+      await db
+        .insert(schema.mapping)
+        .values(rows)
+        .onConflictDoUpdate({
+          target: schema.mapping.anidbId,
+          set: {
+            // COALESCE(current value, incoming value) -- only fills a gap,
+            // never overwrites something Fribb (or an earlier pass) supplied.
+            anilistId: sql`COALESCE(${schema.mapping.anilistId}, excluded.anilist_id)`,
+            malId: sql`COALESCE(${schema.mapping.malId}, excluded.mal_id)`
+          }
+        });
+    },
+    ctx
+  );
 
-    await db
-      .insert(schema.mapping)
-      .values(chunk)
-      .onConflictDoUpdate({
-        target: schema.mapping.anidbId,
-        set: {
-          // COALESCE(current value, incoming value) -- only fills a gap,
-          // never overwrites something Fribb (or an earlier lists pass)
-          // already supplied.
-          anilistId: sql`COALESCE(${schema.mapping.anilistId}, excluded.anilist_id)`,
-          malId: sql`COALESCE(${schema.mapping.malId}, excluded.mal_id)`
-        }
-      });
-    console.log(`[lists-ingest] id backfill ${Math.min(i + CHUNK, withAnidbId.length)}/${withAnidbId.length}`);
-  }
-
-  return { total: withAnidbId.length };
+  console.log(`[lists-ingest] ids: ${result.processed}/${withAnidbId.length} processed, ${result.added.length} new, done=${result.done}`);
+  return { total: withAnidbId.length, added: result.added, done: result.done };
 }
 
 /**
@@ -65,16 +67,27 @@ export async function ingestListsIds(entries?: ListsIdEntry[]): Promise<{ total:
  * lists-main's anime-airing.json. This is a full replace, not a merge: shows
  * missing from the new snapshot (because they finished airing) get their
  * airing flag cleared, so this never leaves a stale "airing" show behind.
+ * Not chunked/resumable -- at ~300 entries this is fast enough to always run
+ * to completion in one pass, and half-clearing the airing flag on yield
+ * would be a worse inconsistency than just letting it finish.
  */
-export async function ingestAiring(entries?: ListsAiringEntry[]): Promise<{ total: number; notInCatalog: number }> {
+export async function ingestAiring(
+  entries?: ListsAiringEntry[]
+): Promise<{ total: number; notInCatalog: number; newlyAiring: number[]; noLongerAiring: number[] }> {
   const all = entries ?? (await downloadJson<ListsAiringEntry[]>(Config.sources.animeAiringJsonUrl, 'anime-airing.json'));
+
+  const wasAiring = new Set(
+    (await db.select({ anidbId: schema.mapping.anidbId }).from(schema.mapping).where(eq(schema.mapping.airing, true))).map(
+      (r) => r.anidbId
+    )
+  );
 
   await db.update(schema.mapping).set({ airing: false, episodeProgress: null, nextEpisodeAt: null }).where(eq(schema.mapping.airing, true));
 
   let notInCatalog = 0;
+  const nowAiring = new Set<number>();
   for (const entry of all) {
     if (typeof entry.idAniDB !== 'number') continue;
-
     const { episodeProgress, nextEpisodeAt } = toAiringFields(entry);
 
     const result = await db
@@ -87,9 +100,14 @@ export async function ingestAiring(entries?: ListsAiringEntry[]): Promise<{ tota
     // normally happen -- but if lists-main is ahead of the XML repo on a
     // brand-new anime, there's nothing to update yet. Not fatal, just noted.
     if (result.length === 0) notInCatalog++;
+    else nowAiring.add(entry.idAniDB);
   }
 
-  return { total: all.length, notInCatalog };
+  const newlyAiring = [...nowAiring].filter((id) => !wasAiring.has(id));
+  const noLongerAiring = [...wasAiring].filter((id) => !nowAiring.has(id));
+
+  console.log(`[lists-ingest] airing: ${nowAiring.size} airing, ${newlyAiring.length} newly-airing, ${noLongerAiring.length} finished`);
+  return { total: all.length, notInCatalog, newlyAiring, noLongerAiring };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

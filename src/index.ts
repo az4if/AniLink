@@ -1,26 +1,22 @@
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
+import { readFileSync } from 'node:fs';
 import { Config } from './config.js';
 import { startKeepAlive } from './helpers/self-poll.js';
+import { startScheduler } from './scheduler/index.js';
 import { indexerRoutes } from './routes/indexer.routes.js';
 import { mappingsRoutes } from './routes/mappings.routes.js';
 
 const app = new Hono();
 
-// serves public/favicon.ico, public/favicon.png, etc.
+// serves public/favicon.ico, public/favicon.png, public/index.html (as static assets)
 app.use('/*', serveStatic({ root: './public' }));
 
-app.get('/', (c) =>
-  c.html(
-    `<!doctype html><html><head><title>AniLink</title><link rel="icon" href="/favicon.ico"></head>` +
-      `<body style="font-family:system-ui;text-align:center;padding:4rem">` +
-      `<img src="/favicon.png" width="96" height="96" alt="AniLink" style="border-radius:20px">` +
-      `<h1>AniLink</h1><p>AniDB &lt;-&gt; TVDB/TMDB/AniList/MAL episode mapping API.</p>` +
-      `<p><a href="/mappings?anidb_id=23">/mappings?anidb_id=23</a></p>` +
-      `</body></html>`
-  )
-);
+// explicit route rather than relying on serveStatic's directory-index
+// behavior, so `/` is guaranteed to serve the landing page regardless
+const landingPage = readFileSync(new URL('../public/index.html', import.meta.url), 'utf-8');
+app.get('/', (c) => c.html(landingPage));
 
 app.get('/health', (c) => c.json({ ok: true }));
 app.route('/indexer', indexerRoutes);
@@ -29,4 +25,5 @@ app.route('/mappings', mappingsRoutes);
 serve({ fetch: app.fetch, port: Config.port }, (info) => {
   console.log(`AniLink listening on :${info.port}`);
   startKeepAlive();
+  startScheduler();
 });

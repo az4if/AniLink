@@ -51,9 +51,36 @@ doesn't call AniDB at all:
       backfill (fills gaps only, never overwrites Fribb) + currently-airing
       snapshot (`airing`/`episodeProgress`/`nextEpisodeAt`)
 - [x] `GET /mappings` read API (anidb_id / mal_id / anilist_id / thetvdb_id)
+      -- assembles ids/type/title/airing status live from `mapping`;
+      description/image/episodes are honestly `null`/`[]` pending TVDB
 - [x] `POST /indexer/mapping/refresh`, `/mapping/fribb-refresh`,
-      `/mapping/lists-refresh` -- admin-key gated
+      `/mapping/lists-refresh` -- admin-key gated, all go through `jsonQueue`
+- [x] `JobQueue` (`src/scheduler/queue.ts`) -- single-flight priority queue.
+      A running lower-priority job cooperatively yields (checkpoints via
+      `indexer_state`, doesn't get killed) when a higher-priority one
+      arrives -- proven with a real preemption test, not just asserted
+- [x] Resumable chunked runner (`src/mapping/chunked-runner.ts`) -- every
+      mapping ingest job resumes from `indexer_state`'s cursor after a
+      yield/interrupt, and reports which anidb_ids are newly-added
+- [x] Sequential rate-limited runner (`src/mapping/sequential-runner.ts`) --
+      the ask/get/index/wait/next-id loop for one-id-per-request providers
+      (TVDB), as opposed to the bulk upserts chunked-runner.ts does for the
+      static JSON/XML sources. Delay is `INDEX_DELAY` (seconds, default 5).
+      Same resumable-cursor + yield-checkpoint contract as chunked-runner.ts.
+      Not wired to a real provider yet (no TVDB client exists), but the
+      loop itself -- ordering, per-id delay timing, no trailing wait after
+      the last id, resuming from a given cursor, yielding mid-pass -- is
+      tested with real timing measurements, not just asserted.
+- [x] In-process scheduler (`src/scheduler/index.ts`, off by default --
+      `ENABLE_SCHEDULER=true`) -- configurable cadences via env
+      (`MAPPING_XML_SYNC_HOURS`=720, `MAPPING_IDS_SYNC_HOURS`=6,
+      `AIRING_SYNC_HOURS`=1). Fixed a real bug along the way: `setInterval`'s
+      delay is a 32-bit signed int, so a 30-day interval silently overflowed
+      and fired every 1ms instead -- the scheduler now ticks on a fixed
+      5-minute timer and compares elapsed time in plain arithmetic instead,
+      which works for any interval. Regression-tested.
 - [x] Render free-tier keep-alive (`src/helpers/self-poll.ts`)
+- [x] Landing page + live API tester (`public/index.html`)
 - [ ] **Open problem, split in two:**
       - For the **7,465 anime with a TVDB mapping**: solved, no external
         episode count needed. `reverseResolveRegular()` in resolver.ts
@@ -70,10 +97,46 @@ doesn't call AniDB at all:
         this moment. Whether that's acceptable (mapping-only, no episode
         list, for over half the catalog) or worth adding AniList's
         `Media.episodes` for is an open product decision, not yet made.
-- [ ] TVDB episode fetcher + cache (token refresh)
+- [ ] TVDB episode fetcher + cache (token refresh) -- plugs into `tvdbQueue`
+      the same way the mapping jobs plug into `jsonQueue`, and drives its
+      per-id loop through `runSequential()` in sequential-runner.ts
 - [ ] Merge engine (resolver + TVDB cache + episode count -> `anime.data`)
 - [ ] `/indexer/tvdb/*`, `/indexer/merge/run` routes
-- [ ] External scheduler wiring (cron-job.org hitting the routes above)
+
+## Scheduling & the job queue
+
+Every mapping job (XML, Fribb, lists-main ids, airing) runs through
+`jsonQueue` -- a single-flight priority queue (`src/scheduler/queue.ts`).
+That's true whether the trigger is the in-process scheduler or a manual
+`POST /indexer/*` call, so the two can never race and corrupt a write.
+
+Two ways to trigger jobs, and you can use either or both:
+
+1. **External pinger** (recommended on a host that sleeps when idle, e.g.
+   Render's free tier) -- point cron-job.org or similar at
+   `POST /indexer/mapping/refresh` etc. on whatever cadence you want.
+2. **In-process scheduler** -- set `ENABLE_SCHEDULER=true` and it runs the
+   same jobs on the cadences in `.env.example`
+   (`MAPPING_XML_SYNC_HOURS`/`MAPPING_IDS_SYNC_HOURS`/`AIRING_SYNC_HOURS`).
+   Better suited to an always-on host (paid tier, your own machine) where a
+   timer inside the process can be trusted to actually fire.
+
+Priority: airing (30) > ids (20) > xml (10) -- airing is both the most
+time-sensitive (an episode can air within the hour) and the fastest job, so
+it's allowed to preempt a slower one. "Preempt" here means cooperative
+yielding, not killing a job mid-write: `chunked-runner.ts` checks
+`shouldYield()` between chunks and, if true, checkpoints its position to
+`indexer_state` and returns early rather than getting cut off mid-upsert.
+The next run of that job picks up exactly where it left off. This is
+proven with a real test (`test/queue.test.ts`) that watches a low-priority
+job actually yield instead of either blocking the high-priority one or
+being killed outright.
+
+`tvdbQueue` exists for the same reason but isn't used by anything yet --
+once the TVDB fetcher exists, its active/reconcile jobs plug into it
+exactly the way the mapping jobs plug into `jsonQueue`.
+
+`GET /indexer/queue/status` shows what's running/pending in both queues.
 
 ## Setup
 
@@ -123,15 +186,22 @@ episode number into a TVDB one" -- so it's tested against real entries
 pulled from `anime-list-master.xml`, not made-up fixtures:
 
 ```bash
-npm test              # resolver: 18 assertions against real XML data
-npx tsx test/sources.test.ts   # Fribb + lists-main parsers against real JSON
+npm test                          # resolver: 19 assertions against real XML data
+npx tsx test/sources.test.ts      # Fribb + lists-main parsers against real JSON
+npx tsx test/response.test.ts     # /mappings response shape
+npx tsx test/queue.test.ts        # JobQueue: FIFO, priority preemption, dedup
+npx tsx test/scheduler.test.ts    # regression test for the setInterval overflow bug
+npx tsx test/sequential-runner.test.ts  # per-id ask/get/index/wait loop timing + resume + yield
 ```
 
 `test/resolver.test.ts` covers: plain offset, explicit per-episode overrides
 (including one-to-many `;1-1+2;` combined episodes), range+offset rules, a
-show that's entirely mapped into TVDB's specials season, and Rizelmine --
-which uses absolute numbering AND has explicit range overrides that take
-priority over it.
+show that's entirely mapped into TVDB's specials season, Rizelmine -- which
+uses absolute numbering AND has explicit range overrides that take priority
+over it -- and a round-trip property test (`reverseResolveRegular` inverts
+`resolveEpisode`) across all 430,332 unambiguous episodes in the real file,
+which is what lets episode enumeration be driven by TVDB's own episode list
+instead of a separately-sourced total count.
 
 `test/sources.test.ts` covers: Fribb's TV vs MOVIE shape (the latter has
 `themoviedb_id.movie` as an array instead of `themoviedb_id.tv`), that the

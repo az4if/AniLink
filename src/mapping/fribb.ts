@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { Config } from '../config.js';
 import { db, schema } from '../db/index.js';
+import { runChunked, type YieldCtx } from './chunked-runner.js';
 
 type ThemoviedbId = { tv?: number; movie?: number[] };
 
@@ -52,40 +53,48 @@ export function toFribbDbRow(e: FribbEntry & { anidb_id: number }) {
  * Backfills id/type fields from a Fribb-format anime-list-full.json onto
  * `mapping`. Only touches entries that carry an anidb_id -- everything else
  * in that file (AniList/MAL-only entries with no AniDB association) is
- * outside our AniDB-anchored catalog and skipped.
+ * outside our AniDB-anchored catalog and skipped. Resumable/yield-aware,
+ * see chunked-runner.ts.
  */
-export async function ingestFribb(entries?: FribbEntry[]): Promise<{ total: number; skippedNoAnidbId: number }> {
+export async function ingestFribb(
+  entries?: FribbEntry[],
+  ctx?: YieldCtx
+): Promise<{ total: number; skippedNoAnidbId: number; added: number[]; done: boolean }> {
   const all = entries ?? (await downloadFribbJson());
   const withAnidbId = all.filter((e): e is FribbEntry & { anidb_id: number } => typeof e.anidb_id === 'number');
 
-  const CHUNK = 500;
-  for (let i = 0; i < withAnidbId.length; i += CHUNK) {
-    const chunk = withAnidbId.slice(i, i + CHUNK).map(toFribbDbRow);
+  const result = await runChunked(
+    'mapping-fribb',
+    withAnidbId,
+    500,
+    (e) => e.anidb_id,
+    async (chunk) => {
+      await db
+        .insert(schema.mapping)
+        .values(chunk.map(toFribbDbRow))
+        .onConflictDoUpdate({
+          target: schema.mapping.anidbId,
+          set: {
+            anilistId: excluded('anilist_id'),
+            malId: excluded('mal_id'),
+            kitsuId: excluded('kitsu_id'),
+            livechartId: excluded('livechart_id'),
+            anisearchId: excluded('anisearch_id'),
+            simklId: excluded('simkl_id'),
+            animeNewsNetworkId: excluded('animenewsnetwork_id'),
+            animeCountdownId: excluded('animecountdown_id'),
+            animePlanetId: excluded('anime_planet_id'),
+            type: excluded('type')
+            // tvdbId / tmdbTvId / tmdbMovieIds / imdbIds / season / offset /
+            // mappingList / source deliberately omitted -- XML-owned
+          }
+        });
+    },
+    ctx
+  );
 
-    await db
-      .insert(schema.mapping)
-      .values(chunk)
-      .onConflictDoUpdate({
-        target: schema.mapping.anidbId,
-        set: {
-          anilistId: excluded('anilist_id'),
-          malId: excluded('mal_id'),
-          kitsuId: excluded('kitsu_id'),
-          livechartId: excluded('livechart_id'),
-          anisearchId: excluded('anisearch_id'),
-          simklId: excluded('simkl_id'),
-          animeNewsNetworkId: excluded('animenewsnetwork_id'),
-          animeCountdownId: excluded('animecountdown_id'),
-          animePlanetId: excluded('anime_planet_id'),
-          type: excluded('type')
-          // tvdbId / tmdbTvId / tmdbMovieIds / imdbIds / season / offset /
-          // mappingList / source deliberately omitted -- XML-owned
-        }
-      });
-    console.log(`[fribb-ingest] upserted ${Math.min(i + CHUNK, withAnidbId.length)}/${withAnidbId.length}`);
-  }
-
-  return { total: withAnidbId.length, skippedNoAnidbId: all.length - withAnidbId.length };
+  console.log(`[fribb-ingest] ${result.processed}/${withAnidbId.length} processed, ${result.added.length} new, done=${result.done}`);
+  return { total: withAnidbId.length, skippedNoAnidbId: all.length - withAnidbId.length, added: result.added, done: result.done };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

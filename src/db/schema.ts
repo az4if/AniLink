@@ -24,6 +24,7 @@ export const mapping = pgTable('mapping', {
   imdbIds: text('imdb_ids').array(),
 
   type: text('type'), // TV | MOVIE | OVA | ONA | SPECIAL | HENTAI | UNKNOWN
+  title: text('title'), // from anime-list-master.xml's <n> -- single name, not localized
 
   // from lists-main's anime-airing.json -- a live snapshot of currently-airing
   // shows only. episodeProgress is "episodes aired so far" (nextEpisode - 1),

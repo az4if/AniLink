@@ -3,6 +3,7 @@ import { Config } from '../config.js';
 import { ingestMapping } from '../mapping/ingest.js';
 import { ingestFribb } from '../mapping/fribb.js';
 import { ingestListsIds, ingestAiring } from '../mapping/lists.js';
+import { jsonQueue, tvdbQueue } from '../scheduler/index.js';
 
 export const indexerRoutes = new Hono();
 
@@ -10,20 +11,24 @@ function requireAdmin(headerValue: string | undefined): boolean {
   return Boolean(headerValue) && headerValue === Config.adminKey;
 }
 
+// Every job below is enqueued into jsonQueue rather than run inline -- the
+// same queue the internal scheduler uses (scheduler/index.ts) -- so a
+// manual trigger (e.g. an external pinger hitting this route on a cron)
+// can never overlap a scheduled run and corrupt a write. The route returns
+// as soon as the job is queued, not when it finishes; watch server logs
+// (or GET /indexer/queue/status) for the result of a long-running one.
+
 // POST /indexer/mapping/refresh
 // Re-downloads anime-list-master.xml and upserts the full mapping table.
-// Cheap (a static file fetch + parse), safe to trigger often -- this is the
-// one job with no external rate limit to worry about. Run this BEFORE the
-// two below, since it establishes every anidb_id row they then backfill.
+// Run this before the two below at least once, since it establishes every
+// anidb_id row they then backfill.
 indexerRoutes.post('/mapping/refresh', async (c) => {
   if (!requireAdmin(c.req.header('x-admin-key'))) return c.json({ error: 'unauthorized' }, 401);
-  try {
-    const result = await ingestMapping();
-    return c.json({ ok: true, ...result });
-  } catch (err) {
-    console.error('[indexer] mapping refresh failed:', err);
-    return c.json({ ok: false, error: (err as Error).message }, 500);
-  }
+  jsonQueue.enqueue('manual:mapping-xml', 10, async (ctx) => {
+    const result = await ingestMapping(undefined, ctx);
+    console.log('[indexer] mapping-xml', result);
+  });
+  return c.json({ queued: true, queue: jsonQueue.status() });
 });
 
 // POST /indexer/mapping/fribb-refresh
@@ -31,13 +36,11 @@ indexerRoutes.post('/mapping/refresh', async (c) => {
 // animecountdown/simkl ids + type from the Fribb-format JSON.
 indexerRoutes.post('/mapping/fribb-refresh', async (c) => {
   if (!requireAdmin(c.req.header('x-admin-key'))) return c.json({ error: 'unauthorized' }, 401);
-  try {
-    const result = await ingestFribb();
-    return c.json({ ok: true, ...result });
-  } catch (err) {
-    console.error('[indexer] fribb refresh failed:', err);
-    return c.json({ ok: false, error: (err as Error).message }, 500);
-  }
+  jsonQueue.enqueue('manual:mapping-fribb', 10, async (ctx) => {
+    const result = await ingestFribb(undefined, ctx);
+    console.log('[indexer] mapping-fribb', result);
+  });
+  return c.json({ queued: true, queue: jsonQueue.status() });
 });
 
 // POST /indexer/mapping/lists-refresh
@@ -45,16 +48,23 @@ indexerRoutes.post('/mapping/fribb-refresh', async (c) => {
 // snapshot (airing / episodeProgress / nextEpisodeAt).
 indexerRoutes.post('/mapping/lists-refresh', async (c) => {
   if (!requireAdmin(c.req.header('x-admin-key'))) return c.json({ error: 'unauthorized' }, 401);
-  try {
-    const [ids, airing] = await Promise.all([ingestListsIds(), ingestAiring()]);
-    return c.json({ ok: true, ids, airing });
-  } catch (err) {
-    console.error('[indexer] lists refresh failed:', err);
-    return c.json({ ok: false, error: (err as Error).message }, 500);
-  }
+  jsonQueue.enqueue('manual:mapping-lists', 10, async (ctx) => {
+    const ids = await ingestListsIds(undefined, ctx);
+    const airing = await ingestAiring();
+    console.log('[indexer] mapping-lists', { ids, airing });
+  });
+  return c.json({ queued: true, queue: jsonQueue.status() });
 });
 
-// Placeholders for the next build phases:
-//   POST /indexer/tvdb/active/run
-//   POST /indexer/tvdb/reconcile/run   (resumable via indexer_state cursor)
+// GET /indexer/queue/status
+// Read-only, ungated -- reveals job names/state only, nothing sensitive.
+indexerRoutes.get('/queue/status', (c) => {
+  return c.json({ json: jsonQueue.status(), tvdb: tvdbQueue.status() });
+});
+
+// Placeholders for the next build phase -- once the TVDB fetcher exists it
+// plugs into tvdbQueue exactly the way the routes above plug into
+// jsonQueue: enqueue(id, priority, async (ctx) => runChunked(..., ctx)):
+//   POST /indexer/tvdb/active/run      (currently-airing shows, high priority)
+//   POST /indexer/tvdb/reconcile/run   (full catalog sweep, low priority, resumable)
 //   POST /indexer/merge/run

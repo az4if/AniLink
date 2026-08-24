@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AniLink — anime id &amp; episode mapping API</title>
+<link rel="icon" href="/favicon.ico">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#100d0c; --panel:#18130f; --panel-2:#211a15; --ink:#f3ece3; --muted:#a69684; --line:#2e251e;
+    --flame-1:#e2402c; --flame-2:#f0842e; --flame-3:#f7c13e;
+    --flame: linear-gradient(135deg, var(--flame-1), var(--flame-2), var(--flame-3));
+    --radius: 14px;
+  }
+  *{box-sizing:border-box}
+  html{color-scheme:dark}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:'IBM Plex Sans',system-ui,sans-serif; line-height:1.55;
+  }
+  h1,h2,h3{font-family:'Space Grotesk',system-ui,sans-serif; margin:0 0 .4em; letter-spacing:-.01em}
+  code, pre, .mono{font-family:'IBM Plex Mono',monospace}
+  a{color:var(--ink)}
+  .wrap{max-width:920px; margin:0 auto; padding:0 24px}
+
+  header.top{display:flex; align-items:center; justify-content:space-between; padding:22px 24px; border-bottom:1px solid var(--line)}
+  header.top .brand{display:flex; align-items:center; gap:10px; font-family:'Space Grotesk'; font-weight:700; font-size:19px}
+  header.top img{width:28px; height:28px; border-radius:7px}
+  header.top nav a{color:var(--muted); text-decoration:none; font-size:14px; margin-left:22px}
+  header.top nav a:hover{color:var(--ink)}
+
+  .hero{padding:64px 0 40px}
+  .hero h1{font-size:clamp(28px,4.5vw,42px); max-width:14ch}
+  .hero p.lede{color:var(--muted); font-size:17px; max-width:52ch; margin:14px 0 0}
+
+  /* --- the converging-ids diagram, the signature element --- */
+  .converge{margin:52px 0 8px; overflow:visible}
+  .converge .badge{
+    font-family:'IBM Plex Mono'; font-size:13px; fill:var(--ink);
+  }
+  .converge .badge-bg{fill:var(--panel); stroke:var(--line); stroke-width:1}
+  .converge .badge-bg.active{stroke:var(--flame-2)}
+  .converge .center-ring{fill:var(--panel-2); stroke:url(#flameStroke)}
+  .converge .center-label{font-family:'Space Grotesk'; font-weight:700; font-size:15px; fill:var(--ink)}
+  .converge .line{fill:none; stroke:var(--line); stroke-width:1.5}
+  .converge .line.drawn{stroke:var(--flame-2)}
+  .converge g.node{cursor:pointer}
+  .converge g.node:focus-visible .badge-bg, .converge g.node:hover .badge-bg{stroke:var(--flame-2)}
+
+  @media (prefers-reduced-motion: no-preference){
+    .converge .line{stroke-dasharray:140; stroke-dashoffset:140; animation:draw 900ms ease-out forwards}
+    .converge .line:nth-of-type(1){animation-delay:.05s}
+    .converge .line:nth-of-type(2){animation-delay:.18s}
+    .converge .line:nth-of-type(3){animation-delay:.31s}
+    .converge .line:nth-of-type(4){animation-delay:.44s}
+    @keyframes draw{to{stroke-dashoffset:0}}
+  }
+
+  .lede-out{color:var(--muted); font-size:14px; margin-top:6px}
+
+  section{padding:40px 0; border-top:1px solid var(--line)}
+  section > h2{font-size:22px}
+  section > p.sub{color:var(--muted); margin-top:6px; max-width:60ch}
+
+  .endpoints{display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-top:22px}
+  @media (max-width:640px){.endpoints{grid-template-columns:1fr}}
+  .endpoint{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:14px 16px}
+  .endpoint .verb{display:inline-block; font-family:'IBM Plex Mono'; font-size:11px; font-weight:500; color:var(--flame-3); border:1px solid var(--line); border-radius:5px; padding:1px 6px; margin-right:8px}
+  .endpoint code{font-size:13.5px; color:var(--ink)}
+
+  .panel{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:22px; margin-top:22px}
+  .tester-row{display:flex; gap:10px; flex-wrap:wrap}
+  select, input[type=text]{
+    font-family:'IBM Plex Mono'; font-size:14px; background:var(--panel-2); color:var(--ink);
+    border:1px solid var(--line); border-radius:8px; padding:10px 12px;
+  }
+  select:focus-visible, input:focus-visible, button:focus-visible, a:focus-visible, g.node:focus-visible{
+    outline:2px solid var(--flame-2); outline-offset:2px;
+  }
+  select{flex:0 0 auto}
+  input[type=text]{flex:1 1 160px; min-width:120px}
+  button{
+    font-family:'IBM Plex Mono'; font-size:14px; font-weight:500; color:#1a1310; background:var(--flame);
+    border:0; border-radius:8px; padding:10px 18px; cursor:pointer;
+  }
+  button:hover{filter:brightness(1.06)}
+  button:disabled{opacity:.6; cursor:default}
+  .status-line{color:var(--muted); font-size:13px; margin-top:10px; min-height:1.4em}
+  pre.response{
+    background:var(--panel-2); border:1px solid var(--line); border-radius:10px; padding:16px;
+    margin-top:14px; overflow:auto; font-size:12.5px; max-height:420px;
+  }
+
+  .shape-cols{display:grid; grid-template-columns:1fr 1fr; gap:24px; margin-top:22px; align-items:start}
+  @media (max-width:720px){.shape-cols{grid-template-columns:1fr}}
+  .shape-cols pre{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:18px; font-size:12.5px; overflow:auto}
+  .shape-cols .field{padding:9px 0; border-bottom:1px solid var(--line); font-size:13.5px}
+  .shape-cols .field:last-child{border-bottom:0}
+  .shape-cols .field code{color:var(--flame-3)}
+  .shape-cols .field span{color:var(--muted); display:block; font-size:12.5px; margin-top:2px}
+
+  .status-list{list-style:none; margin:22px 0 0; padding:0; display:grid; gap:8px}
+  .status-list li{display:flex; gap:10px; align-items:baseline; font-size:14px; padding:8px 0; border-bottom:1px solid var(--line)}
+  .status-list li:last-child{border-bottom:0}
+  .mark{font-family:'IBM Plex Mono'; font-size:13px; width:1.3em; flex:0 0 auto}
+  .mark.done{color:var(--flame-3)}
+  .mark.pending{color:var(--muted)}
+
+  footer{padding:28px 0 48px; color:var(--muted); font-size:13px; display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px}
+  footer a{color:var(--muted)}
+  footer a:hover{color:var(--ink)}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand"><img src="/favicon.png" alt=""> AniLink</div>
+  <nav>
+    <a href="#try-it">Try it</a>
+    <a href="#shape">Response shape</a>
+    <a href="#status">Status</a>
+  </nav>
+</header>
+
+<div class="wrap">
+  <div class="hero">
+    <h1>One anime id in. Every anime id out.</h1>
+    <p class="lede">AniLink cross-references AniDB, MAL, AniList, Kitsu, TVDB, TMDB and more against a single AniDB-anchored catalog — query with whichever id you already have.</p>
+
+    <svg class="converge" viewBox="0 0 820 260" width="100%" role="img" aria-label="Four id badges — mal_id, anidb_id, anilist_id, tvdb_id — converging into one AniLink record">
+      <defs>
+        <linearGradient id="flameStroke" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#e2402c"/><stop offset=".5" stop-color="#f0842e"/><stop offset="1" stop-color="#f7c13e"/>
+        </linearGradient>
+      </defs>
+
+      <path class="line" d="M150,40 C260,40 300,110 388,122"/>
+      <path class="line" d="M150,90 C240,90 300,115 388,128"/>
+      <path class="line" d="M150,180 C240,180 300,150 388,138"/>
+      <path class="line" d="M150,225 C260,225 300,155 388,140"/>
+
+      <g class="node" tabindex="0" role="button" aria-label="Try mal_id 57181" data-provider="mal_id" data-value="57181">
+        <rect class="badge-bg" x="4" y="20" width="146" height="34" rx="17"/>
+        <text class="badge" x="20" y="42">mal_id 57181</text>
+      </g>
+      <g class="node" tabindex="0" role="button" aria-label="Try anidb_id 18278" data-provider="anidb_id" data-value="18278">
+        <rect class="badge-bg" x="4" y="70" width="160" height="34" rx="17"/>
+        <text class="badge" x="20" y="92">anidb_id 18278</text>
+      </g>
+      <g class="node" tabindex="0" role="button" aria-label="Try anilist_id 170942" data-provider="anilist_id" data-value="170942">
+        <rect class="badge-bg" x="4" y="160" width="170" height="34" rx="17"/>
+        <text class="badge" x="20" y="182">anilist_id 170942</text>
+      </g>
+      <g class="node" tabindex="0" role="button" aria-label="Try thetvdb_id 429934" data-provider="thetvdb_id" data-value="429934">
+        <rect class="badge-bg" x="4" y="208" width="172" height="34" rx="17"/>
+        <text class="badge" x="20" y="230">tvdb_id 429934</text>
+      </g>
+
+      <circle class="center-ring" cx="470" cy="130" r="58" stroke-width="2"/>
+      <text class="center-label" x="470" y="126" text-anchor="middle">AniLink</text>
+      <text class="badge" x="470" y="146" text-anchor="middle" fill="#a69684" font-size="11">record</text>
+
+      <path class="line" d="M528,130 C610,130 610,130 660,130" stroke-dasharray="none" style="animation-delay:.6s"/>
+      <text class="mono" x="672" y="100" font-size="12" fill="#a69684">{</text>
+      <text class="mono" x="686" y="118" font-size="12" fill="#f7c13e">"ids"</text>
+      <text class="mono" x="686" y="136" font-size="12" fill="#f7c13e">"title"</text>
+      <text class="mono" x="686" y="154" font-size="12" fill="#a69684">...</text>
+      <text class="mono" x="672" y="172" font-size="12" fill="#a69684">}</text>
+    </svg>
+    <p class="lede-out">Click any id above to try it below.</p>
+  </div>
+
+  <section id="try-it">
+    <h2>Try it</h2>
+    <p class="sub">Runs against this server's live database.</p>
+    <div class="panel">
+      <div class="tester-row">
+        <select id="provider">
+          <option value="anidb_id" selected>anidb_id</option>
+          <option value="mal_id">mal_id</option>
+          <option value="anilist_id">anilist_id</option>
+          <option value="thetvdb_id">thetvdb_id</option>
+        </select>
+        <input type="text" id="value" value="23" inputmode="numeric" aria-label="id value">
+        <button id="send">GET /mappings</button>
+      </div>
+      <div class="status-line" id="status">Defaults to anidb_id=23 (Cowboy Bebop).</div>
+      <pre class="response" id="response">// response appears here</pre>
+    </div>
+  </section>
+
+  <section>
+    <h2>Endpoint</h2>
+    <p class="sub">One endpoint, four ways to look a title up. Whichever id you already have works.</p>
+    <div class="endpoints">
+      <div class="endpoint"><span class="verb">GET</span><code>/mappings?anidb_id=18278</code></div>
+      <div class="endpoint"><span class="verb">GET</span><code>/mappings?mal_id=57181</code></div>
+      <div class="endpoint"><span class="verb">GET</span><code>/mappings?anilist_id=170942</code></div>
+      <div class="endpoint"><span class="verb">GET</span><code>/mappings?thetvdb_id=429934</code></div>
+    </div>
+  </section>
+
+  <section id="shape">
+    <h2>Response shape</h2>
+    <p class="sub">Every field on the left is real. <code>description</code>, <code>image</code>, and <code>episodes</code> come back honestly empty until the TVDB fetcher and merge engine ship — see status below.</p>
+    <div class="shape-cols">
+      <pre>{
+  "ids": {
+    "anidb": 23, "mal": 1,
+    "anilist": 1, "kitsu": 1,
+    "tvdb": 76885,
+    "tmdb": { "tv": 30991, "movie": [] },
+    "imdb": ["tt0213338"],
+    "livechart": 3418, "anisearch": 1572,
+    "animePlanet": "cowboy-bebop",
+    "animeNewsNetwork": 13,
+    "animeCountdown": 37089,
+    "simkl": 37089
+  },
+  "type": "TV",
+  "title": "Cowboy Bebop",
+  "airing": false,
+  "episodeProgress": null,
+  "nextEpisodeAt": null,
+  "description": null,
+  "image": null,
+  "episodes": [],
+  "updatedAt": "2026-08-23T00:00:00Z"
+}</pre>
+      <div>
+        <div class="field"><code>ids</code><span>Every provider id AniLink has cross-referenced for this title.</span></div>
+        <div class="field"><code>type</code><span>TV / MOVIE / OVA / ONA / SPECIAL / HENTAI / UNKNOWN.</span></div>
+        <div class="field"><code>airing / episodeProgress / nextEpisodeAt</code><span>Live, from an hourly-refreshed schedule feed — only set for currently-airing titles.</span></div>
+        <div class="field"><code>description / image / episodes</code><span>Not populated yet — pending the TVDB integration.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="status">
+    <h2>Status</h2>
+    <p class="sub">What's actually live right now, not a roadmap promise.</p>
+    <ul class="status-list">
+      <li><span class="mark done">done</span> Full AniDB catalog mapping (anidb/mal/anilist/kitsu/tvdb/tmdb/imdb + 6 more provider ids)</li>
+      <li><span class="mark done">done</span> Season-offset &amp; per-episode mapping resolution, forward and reverse</li>
+      <li><span class="mark done">done</span> Hourly airing-status sync, 6-hourly id backfill, monthly full resync</li>
+      <li><span class="mark pending">pending</span> TVDB episode data — titles, images, descriptions, full episode lists</li>
+      <li><span class="mark pending">pending</span> Episode data for the ~56% of the catalog with no TVDB mapping</li>
+    </ul>
+  </section>
+</div>
+
+<footer>
+  <div class="wrap" style="display:flex; justify-content:space-between; width:100%; flex-wrap:wrap; gap:10px">
+    <span>AniLink</span>
+    <span>AniDB · TVDB · TMDB · AniList · MAL · Kitsu</span>
+  </div>
+</footer>
+
+<script>
+  const providerSel = document.getElementById('provider');
+  const valueInput = document.getElementById('value');
+  const sendBtn = document.getElementById('send');
+  const statusEl = document.getElementById('status');
+  const responseEl = document.getElementById('response');
+
+  async function runQuery(provider, value) {
+    providerSel.value = provider;
+    valueInput.value = value;
+    sendBtn.disabled = true;
+    statusEl.textContent = 'Loading…';
+    const url = '/mappings?' + provider + '=' + encodeURIComponent(value);
+    try {
+      const started = performance.now();
+      const res = await fetch(url);
+      const ms = Math.round(performance.now() - started);
+      const body = await res.json();
+      responseEl.textContent = JSON.stringify(body, null, 2);
+      statusEl.textContent = url + ' — ' + res.status + ' in ' + ms + 'ms';
+    } catch (err) {
+      statusEl.textContent = 'Request failed: ' + err.message;
+      responseEl.textContent = '// could not reach the API';
+    } finally {
+      sendBtn.disabled = false;
+    }
+  }
+
+  sendBtn.addEventListener('click', () => runQuery(providerSel.value, valueInput.value));
+  valueInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') runQuery(providerSel.value, valueInput.value); });
+
+  document.querySelectorAll('.converge .node').forEach((node) => {
+    const activate = () => {
+      document.querySelectorAll('.converge .badge-bg').forEach((b) => b.classList.remove('active'));
+      node.querySelector('.badge-bg').classList.add('active');
+      document.getElementById('try-it').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      runQuery(node.dataset.provider, node.dataset.value);
+    };
+    node.addEventListener('click', activate);
+    node.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); } });
+  });
+</script>
+</body>
+</html>

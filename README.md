@@ -153,6 +153,13 @@ exactly the way the mapping jobs plug into `jsonQueue`.
 
 `GET /indexer/queue/status` shows what's running/pending in both queues.
 
+`GET /indexer/status` is the "is this actually running?" endpoint -- for
+each job, when it last completed (or checkpointed, if it yielded mid-pass)
+and current row counts in `mapping`/`anime`/`tvdb_cache`. If a job's
+`lastCheckpoint` is old or `everRun` is `false`, nothing has triggered it --
+check `ENABLE_SCHEDULER`, or whether an external pinger is actually
+configured, before assuming something's broken.
+
 ## Setup
 
 ```bash

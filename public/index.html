@@ -244,7 +244,7 @@
       <div>
         <div class="field"><code>ids</code><span>Every provider id AniLink has cross-referenced for this title.</span></div>
         <div class="field"><code>type</code><span>TV / MOVIE / OVA / ONA / SPECIAL / HENTAI / UNKNOWN.</span></div>
-        <div class="field"><code>airing / episodeProgress / nextEpisodeAt</code><span>Live, from an hourly-refreshed schedule feed — only set for currently-airing titles.</span></div>
+        <div class="field"><code>airing / episodeProgress / nextEpisodeAt</code><span>Live, from a scheduled sync of the airing feed — only set for currently-airing titles.</span></div>
         <div class="field"><code>description / image / episodes</code><span>Not populated yet — pending the TVDB integration.</span></div>
       </div>
     </div>
@@ -256,7 +256,7 @@
     <ul class="status-list">
       <li><span class="mark done">done</span> Full AniDB catalog mapping (anidb/mal/anilist/kitsu/tvdb/tmdb/imdb + 6 more provider ids)</li>
       <li><span class="mark done">done</span> Season-offset &amp; per-episode mapping resolution, forward and reverse</li>
-      <li><span class="mark done">done</span> Hourly airing-status sync, 6-hourly id backfill, monthly full resync</li>
+      <li><span class="mark done">done</span> All four mapping sources sync together on one schedule; rate-limited job queue ready for TVDB</li>
       <li><span class="mark pending">pending</span> TVDB episode data — titles, images, descriptions, full episode lists</li>
       <li><span class="mark pending">pending</span> Episode data for the ~56% of the catalog with no TVDB mapping</li>
     </ul>

@@ -1,260 +1,271 @@
 <p align="center"><img src="public/favicon.png" width="120" height="120" alt="AniLink"></p>
 <h1 align="center">AniLink</h1>
 
-AniDB &lt;-&gt; TVDB/TMDB/AniList/MAL episode mapping API. AniDB's episode list is
-canonical; TVDB/TMDB data enriches it (title/overview/image) where a mapping
-exists. Same design as zenshin-API, rebuilt so the mapping-resolution logic
-is transparent and testable instead of a black box.
+<p align="center">AniDB &lt;-&gt; TVDB/TMDB/AniList/MAL/Kitsu id and episode mapping API.</p>
 
 Runs as a single always-on Node process (Render web service or your own
-machine) -- no serverless, since the indexer needs to run long throttled
-loops that a serverless function would just get killed mid-way through.
+machine) -- no serverless, since the indexer runs long throttled loops that
+a serverless function would just get killed mid-way through.
 
-## Data flow
+## Deploy
 
-<p align="center"><img src="docs/anilink_data_flow.svg" alt="AniLink data flow: Anime-list XML, Fribb JSON, and Lists-main JSON feed scheduled Ingest jobs, which write into the Postgres mapping table, which GET /mappings reads live to answer clients."></p>
+1. **Get a Postgres database.** Supabase or Neon, not Render's own free
+   Postgres -- that one is deleted 30 days after creation, which will
+   quietly wipe out a mirror that took real time to build.
+2. **Clone this repo, install, configure.**
+   ```bash
+   npm install
+   cp .env.example .env
+   ```
+   Open `.env` and set `DATABASE_URL` at minimum. Everything else has a
+   working default -- see [Environment variables](#environment-variables)
+   for what each one does.
+3. **Create the schema.**
+   ```bash
+   npm run db:generate   # generates SQL from src/db/schema.ts
+   npm run db:migrate    # applies it -- same command works against
+                          # Supabase, Neon, self-hosted, or local Postgres
+   ```
+   **Re-run `db:migrate` every time you pull code that changed
+   `src/db/schema.ts`.** A schema that's out of sync with the code is the
+   single most common cause of `Internal Server Error` -- see
+   [Troubleshooting](#troubleshooting).
+4. **Seed the mapping table** (takes a few minutes, all four sources are
+   static file downloads, no rate limit):
+   ```bash
+   npm run dev   # starts the server
+   ```
+   ```bash
+   curl -X POST http://localhost:3000/indexer/mapping/sync -H "x-admin-key: change-me"
+   ```
+   (`change-me` is the default `ADMIN_KEY` -- change it in `.env` before
+   deploying anywhere public.)
+5. **Confirm it actually worked:**
+   ```bash
+   curl http://localhost:3000/indexer/status
+   ```
+   `rowCounts.mapping` should read somewhere around 16,000-17,000 once the
+   sync finishes. If it reads 0 or the request errors, see
+   [Troubleshooting](#troubleshooting) before doing anything else.
+6. **Deploy the app itself** wherever you like (Render, your own box, etc).
+   Set the same env vars there. If the host sleeps when idle (Render free
+   tier), also set `RENDER_KEEP_ALIVE=true` and `PUBLIC_URL` to your
+   deployed URL.
+7. **Turn on scheduling** -- see [The schedule](#the-schedule-in-plain-terms)
+   below. Nothing runs automatically until you do this step.
 
-Three external sources feed scheduled ingest jobs, which write into the
-Postgres `mapping` table, which `GET /mappings` reads live to answer clients.
+## Environment variables
 
-## Design decision: no live AniDB API access
-
-AniDB's website (and likely its API subdomain) sits behind Cloudflare, which
-blocks datacenter/cloud IPs by default -- and AniDB's own long-standing
-policy is that its client API isn't meant to be hit from a VPS/cloud server
-anyway, only a residential connection. Rather than fight that, AniLink
-doesn't call AniDB at all:
-
-- IDs (anidb_id, anilist_id, mal_id, tvdb_id, tmdb_id, ...) come from
-  `anime-list-master.xml` + Fribb's JSON + `lists-main` -- all static file
-  downloads, no live AniDB traffic.
-- Episode *count* comes from AniList's public GraphQL API (no auth, no
-  Cloudflare, cloud-host-friendly) or `lists-main` if it's already there.
-- TVDB is canonical for actual episode data (title/overview/image/airdate),
-  not just enrichment. Regular episodes are numbered 1..episodeCount and fed
-  straight into the resolver -- AniDB's own regular-episode numbering is
-  always sequential, so this produces the same result as fetching the list
-  from AniDB directly would have.
-- **Trade-off:** specials/OVA/OP/ED/trailer episodes aren't mappable this
-  way -- those only exist as distinct entries because AniDB assigns them
-  their own S1/T1/O1-style numbers, which is exactly what the
-  `mapping-list` overrides in anime-lists-xml are keyed against. Not
-  supported for v1.
-
-## What's actually built right now
-
-- [x] Postgres schema (`src/db/schema.ts`) -- `mapping`, `tvdb_cache`,
-      `anime` (final/served), `indexer_state` (resumable cursors)
-- [x] `anime-list-master.xml` parser + ingest (`src/mapping/xml-parser.ts`,
-      `src/mapping/ingest.ts`) -- primary source, owns tvdb/tmdb ids,
-      season/offset, and the per-episode mapping-list overrides
-- [x] The season-offset / mapping-list resolver, forward AND reverse
-      (`src/mapping/resolver.ts`) -- **tested against real data**, see below
-- [x] Fribb-format JSON cross-reference (`src/mapping/fribb.ts`) -- backfills
-      anilist/mal/kitsu/livechart/anisearch/anime-planet/ann/animecountdown/
-      simkl ids + type. Never touches tvdb/tmdb/season/offset -- those stay
-      XML-owned.
-- [x] lists-main cross-reference (`src/mapping/lists.ts`) -- id freshness
-      backfill (fills gaps only, never overwrites Fribb) + currently-airing
-      snapshot (`airing`/`episodeProgress`/`nextEpisodeAt`)
-- [x] `GET /mappings` read API (anidb_id / mal_id / anilist_id / thetvdb_id)
-      -- assembles ids/type/title/airing status live from `mapping`;
-      description/image/episodes are honestly `null`/`[]` pending TVDB
-- [x] `POST /indexer/mapping/refresh`, `/mapping/fribb-refresh`,
-      `/mapping/lists-refresh` -- admin-key gated, all go through `jsonQueue`
-- [x] `JobQueue` (`src/scheduler/queue.ts`) -- single-flight priority queue.
-      A running lower-priority job cooperatively yields (checkpoints via
-      `indexer_state`, doesn't get killed) when a higher-priority one
-      arrives -- proven with a real preemption test, not just asserted
-- [x] Resumable chunked runner (`src/mapping/chunked-runner.ts`) -- every
-      mapping ingest job resumes from `indexer_state`'s cursor after a
-      yield/interrupt, and reports which anidb_ids are newly-added
-- [x] Sequential rate-limited runner (`src/mapping/sequential-runner.ts`) --
-      the ask/get/index/wait/next-id loop for one-id-per-request providers
-      (TVDB), as opposed to the bulk upserts chunked-runner.ts does for the
-      static JSON/XML sources. Delay is `INDEX_DELAY` (seconds, default 5).
-      Same resumable-cursor + yield-checkpoint contract as chunked-runner.ts.
-      Not wired to a real provider yet (no TVDB client exists), but the
-      loop itself -- ordering, per-id delay timing, no trailing wait after
-      the last id, resuming from a given cursor, yielding mid-pass -- is
-      tested with real timing measurements, not just asserted.
-- [x] In-process scheduler (`src/scheduler/index.ts`, off by default --
-      `ENABLE_SCHEDULER=true`) -- configurable cadences via env
-      (`MAPPING_XML_SYNC_HOURS`=720, `MAPPING_IDS_SYNC_HOURS`=6,
-      `AIRING_SYNC_HOURS`=1). Fixed a real bug along the way: `setInterval`'s
-      delay is a 32-bit signed int, so a 30-day interval silently overflowed
-      and fired every 1ms instead -- the scheduler now ticks on a fixed
-      5-minute timer and compares elapsed time in plain arithmetic instead,
-      which works for any interval. Regression-tested.
-- [x] `GET /health` (`src/index.ts`) -- pings the database with a trivial
-      query so an uptime monitor (or the self-poll keep-alive below) can
-      tell "process is up" apart from "process is up but the database
-      connection is dead". Returns `200` with `{status: 'ok', database:
-      'ok', timestamp}` when the db answers, `503` with `status: 'error'`
-      when it doesn't.
-- [x] Render free-tier keep-alive (`src/helpers/self-poll.ts`) -- pings its
-      own `/health` endpoint every 10 minutes so Render's free tier doesn't
-      spin the instance down from inactivity
-- [x] Landing page + live API tester (`public/index.html`)
-- [ ] **Open problem, split in two:**
-      - For the **7,465 anime with a TVDB mapping**: solved, no external
-        episode count needed. `reverseResolveRegular()` in resolver.ts
-        inverts the same offset/mapping-list math, so once the TVDB fetcher
-        exists, its own episode list is self-terminating -- verified by a
-        round-trip test across all 430,332 unambiguous real episodes (879
-        destinations are genuinely ambiguous in the *source* mapping data
-        itself -- e.g. Ghost in the Shell explicitly maps six different
-        AniDB catalog entries to the same one TVDB episode -- and are
-        excluded from that count rather than miscounted as passing).
-      - For the **9,400 anime with NO TVDB mapping (56% of the catalog)**:
-        still unsolved. There's no episode data source for these at all
-        right now -- `anime-airing.json` only covers the ~300 shows airing
-        this moment. Whether that's acceptable (mapping-only, no episode
-        list, for over half the catalog) or worth adding AniList's
-        `Media.episodes` for is an open product decision, not yet made.
-- [ ] TVDB episode fetcher + cache (token refresh) -- plugs into `tvdbQueue`
-      the same way the mapping jobs plug into `jsonQueue`, and drives its
-      per-id loop through `runSequential()` in sequential-runner.ts
-- [ ] Merge engine (resolver + TVDB cache + episode count -> `anime.data`)
-- [ ] `/indexer/tvdb/*`, `/indexer/merge/run` routes
-
-## Scheduling & the job queue
-
-Every mapping job (XML, Fribb, lists-main ids, airing) runs through
-`jsonQueue` -- a single-flight priority queue (`src/scheduler/queue.ts`).
-That's true whether the trigger is the in-process scheduler or a manual
-`POST /indexer/*` call, so the two can never race and corrupt a write.
-
-Two ways to trigger jobs, and you can use either or both:
-
-1. **External pinger** (recommended on a host that sleeps when idle, e.g.
-   Render's free tier) -- point cron-job.org or similar at
-   `POST /indexer/mapping/refresh` etc. on whatever cadence you want.
-2. **In-process scheduler** -- set `ENABLE_SCHEDULER=true` and it runs the
-   same jobs on the cadences in `.env.example`
-   (`MAPPING_XML_SYNC_HOURS`/`MAPPING_IDS_SYNC_HOURS`/`AIRING_SYNC_HOURS`).
-   Better suited to an always-on host (paid tier, your own machine) where a
-   timer inside the process can be trusted to actually fire.
-
-Priority: airing (30) > ids (20) > xml (10) -- airing is both the most
-time-sensitive (an episode can air within the hour) and the fastest job, so
-it's allowed to preempt a slower one. "Preempt" here means cooperative
-yielding, not killing a job mid-write: `chunked-runner.ts` checks
-`shouldYield()` between chunks and, if true, checkpoints its position to
-`indexer_state` and returns early rather than getting cut off mid-upsert.
-The next run of that job picks up exactly where it left off. This is
-proven with a real test (`test/queue.test.ts`) that watches a low-priority
-job actually yield instead of either blocking the high-priority one or
-being killed outright.
-
-`tvdbQueue` exists for the same reason but isn't used by anything yet --
-once the TVDB fetcher exists, its active/reconcile jobs plug into it
-exactly the way the mapping jobs plug into `jsonQueue`.
-
-`GET /indexer/queue/status` shows what's running/pending in both queues.
-
-`GET /indexer/status` is the "is this actually running?" endpoint -- for
-each job, when it last completed (or checkpointed, if it yielded mid-pass)
-and current row counts in `mapping`/`anime`/`tvdb_cache`. If a job's
-`lastCheckpoint` is old or `everRun` is `false`, nothing has triggered it --
-check `ENABLE_SCHEDULER`, or whether an external pinger is actually
-configured, before assuming something's broken.
-
-## Setup
-
-```bash
-npm install
-cp .env.example .env   # then fill in DATABASE_URL at minimum
-npm run db:generate    # generates SQL migration from schema.ts
-npm run db:migrate     # applies it -- works against Supabase, Neon,
-                        # self-hosted, or a local Postgres identically,
-                        # it's all just DATABASE_URL
-npm run dev
-```
-
-Seed the mapping table -- run in this order, since Fribb/lists-main backfill
-onto rows the XML pass creates:
-
-```bash
-curl -X POST http://localhost:3000/indexer/mapping/refresh        -H "x-admin-key: $ADMIN_KEY"
-curl -X POST http://localhost:3000/indexer/mapping/fribb-refresh  -H "x-admin-key: $ADMIN_KEY"
-curl -X POST http://localhost:3000/indexer/mapping/lists-refresh  -H "x-admin-key: $ADMIN_KEY"
-```
-
-or without the server: `npm run ingest:mapping && npm run ingest:fribb && npm run ingest:lists`.
-
-## Sources
-
-All four are static-file downloads, no live scraping, no auth, all
-overridable via env (see `.env.example`):
-
-| Source | Default | Owns |
+| Var | Default | What it does |
 |---|---|---|
-| `ANIME_LIST_MASTER_XML_URL` | Anime-Lists/anime-lists `anime-list-master.xml` | tvdb/tmdb ids, season+offset, per-episode mapping-list overrides -- **primary**, run this first |
-| `FRIBB_JSON_URL` | Fribb/anime-lists (upstream) | anilist/mal/kitsu/livechart/anisearch/anime-planet/ann/animecountdown/simkl ids, `type` |
-| `ANIME_JSON_URL` | anime-and-manga/lists `anime.json` | anilist/mal id, freshness-only (fills gaps Fribb hasn't caught up on yet, never overwrites) |
-| `ANIME_AIRING_JSON_URL` | anime-and-manga/lists `anime-airing.json` | `airing`/`episodeProgress`/`nextEpisodeAt` for currently-airing shows only |
+| `DATABASE_URL` | *(required)* | Postgres connection string. Same format for every provider. |
+| `PORT` | `3000` | What port the API listens on. |
+| `ADMIN_KEY` | `change-me` | Required as `x-admin-key` header on every `POST /indexer/*` route. **Change this before deploying publicly.** |
+| `PUBLIC_URL` | *(empty)* | Only used by the Render keep-alive self-ping. Leave blank on localhost. |
+| `RENDER_KEEP_ALIVE` | `false` | Set `true` only on Render's free tier, so the instance doesn't sleep after 15 min idle. |
+| `ENABLE_SCHEDULER` | `false` | Turns on the in-process scheduler. See [The schedule](#the-schedule-in-plain-terms). |
+| `MAPPING_SYNC_HOURS` | `3` | How often the XML/Fribb/ids/airing sources refresh together. |
+| `TVDB_SYNC_HOURS` | `6` | How often the "new + currently-airing only" TVDB pass runs. |
+| `TVDB_FULL_SYNC_HOURS` | `720` (30 days) | How often TVDB re-checks *everything*, not just new/airing. |
+| `INDEX_DELAY` | `5` | Seconds to wait between each individual TVDB request (ask id 1, wait, ask id 2, wait, ...). |
+| `TVDB_API_KEY` / `TVDB_API_PIN` | *(empty)* | From thetvdb.com/api-information. PIN is only needed for "user-supported" keys -- see below. |
+| `ANIME_LIST_MASTER_XML_URL` | Anime-Lists/anime-lists | Only set if pointing at a fork/mirror. |
+| `FRIBB_JSON_URL` | Fribb/anime-lists | Same. |
+| `ANIME_JSON_URL` | anime-and-manga/lists | Same. |
+| `ANIME_AIRING_JSON_URL` | anime-and-manga/lists | Same. |
 
-Note on `anime-list-full.xml` (also in the Anime-Lists repo): it's a
-*derived* subset of `anime-list-master.xml` that drops empty entries but
-keeps "unknown" ones, meant for their own scraper tooling. Parsing
-`anime-list-master.xml` directly (what this project does) already gives you
-a superset of it, so there's no reason to also pull `full.xml`.
+`TVDB_API_PIN`: most keys created today don't need one at all -- try
+without it first (leave it blank). If TVDB's login rejects the key with a
+"pin required" error, that specific key was issued under the
+"user-supported" funding model and needs a personal PIN from a
+thetvdb.com/subscribe subscription.
 
-## Verifying the resolver and the source parsers
+## The schedule, in plain terms
 
-The resolver is the piece that actually answers "how do I turn an AniDB
-episode number into a TVDB one" -- so it's tested against real entries
-pulled from `anime-list-master.xml`, not made-up fixtures:
+Nothing runs automatically until `ENABLE_SCHEDULER=true` is set. That's the
+single most common reason a fresh deploy looks like it's "not indexing" --
+it isn't broken, it's just never been told to start. (The alternative to
+this switch: an outside service like cron-job.org calling the
+`POST /indexer/*` URLs below on a timer instead. Either works; you need one
+of them.)
 
-```bash
-npm test                          # resolver: 19 assertions against real XML data
-npx tsx test/sources.test.ts      # Fribb + lists-main parsers against real JSON
-npx tsx test/response.test.ts     # /mappings response shape
-npx tsx test/queue.test.ts        # JobQueue: FIFO, priority preemption, dedup
-npx tsx test/scheduler.test.ts    # regression test for the setInterval overflow bug
-npx tsx test/sequential-runner.test.ts  # per-id ask/get/index/wait loop timing + resume + yield
+Once it's on, two alarm clocks:
+
+1. **Every `MAPPING_SYNC_HOURS`** (default 3) -- re-downloads all four
+   mapping sources (XML, Fribb, lists-main ids, lists-main airing) and
+   updates the `mapping` table. After each run, it knows exactly which
+   anidb_ids are brand new since last time.
+2. **Every `TVDB_SYNC_HOURS`** (default 6) -- asks TVDB for episode data,
+   but *only* for anime that are either currently airing (always worth
+   rechecking) or have never been asked about before. The very first time
+   this runs, "never asked before" means *everything*, so it's slow --
+   every subsequent run only touches the small new+airing subset, so it's
+   fast. There's also **`TVDB_FULL_SYNC_HOURS`** (default 30 days) which
+   ignores that shortcut and re-asks about every single mapped anime,
+   catching anything that slipped through (e.g. an anime that gained a
+   TVDB mapping later on).
+
+These never run at the same time as each other within their own lane --
+mapping jobs queue behind mapping jobs, TVDB jobs queue behind TVDB jobs --
+so nothing can corrupt a write by overlapping itself. The two lanes are
+otherwise independent of each other.
+
+## The queue
+
+Two separate queues (`src/scheduler/queue.ts`):
+
+- **`jsonQueue`** -- the four mapping sources. No external rate limit here,
+  this queue exists purely so two of them can't write to the DB at once.
+- **`tvdbQueue`** -- TVDB jobs. This one matters for a real reason: TVDB
+  has one shared rate budget, so if a fast, urgent job (like the
+  new+airing check) needs to run while a slow full sweep is in progress,
+  the slow one has to make room.
+
+"Make room" means cooperative yielding, not getting killed mid-write: the
+running job checks a `shouldYield()` flag between each unit of work and, if
+true, saves exactly where it was (in `indexer_state`) and stops -- the next
+run of that same job picks up right where it left off instead of starting
+over.
+
+## API
+
+**`GET /mappings?anidb_id=18278`** (also accepts `mal_id`, `anilist_id`,
+`thetvdb_id`) -- the public endpoint. Returns:
+
+```jsonc
+{
+  "ids": { "anidb": 23, "mal": 1, "anilist": 1, "tvdb": 76885, /* ...and more */ },
+  "type": "TV",
+  "title": "Cowboy Bebop",
+  "airing": false,
+  "episodeProgress": null,
+  "nextEpisodeAt": null,
+  "description": null,  // pending the TVDB fetcher -- see below
+  "image": null,         // pending the TVDB fetcher
+  "episodes": []         // pending the TVDB fetcher
+}
 ```
 
-`test/resolver.test.ts` covers: plain offset, explicit per-episode overrides
-(including one-to-many `;1-1+2;` combined episodes), range+offset rules, a
-show that's entirely mapped into TVDB's specials season, Rizelmine -- which
-uses absolute numbering AND has explicit range overrides that take priority
-over it -- and a round-trip property test (`reverseResolveRegular` inverts
-`resolveEpisode`) across all 430,332 unambiguous episodes in the real file,
-which is what lets episode enumeration be driven by TVDB's own episode list
-instead of a separately-sourced total count.
+If a `tvdb_id` genuinely doesn't exist for an anime (no TVDB entry at all --
+true for about 56% of the catalog, mostly movies/OVAs/very obscure titles),
+that's not an error or a bug: `ids.tvdb` is just `null`, meaning "TVDB
+coverage for this anime doesn't exist," and TVDB-derived fields stay empty
+permanently for it. The monthly full resync (`TVDB_FULL_SYNC_HOURS`) will
+pick it up automatically the moment any of the four mapping sources
+*does* find a tvdb_id for it later -- nothing extra to do.
 
-`test/sources.test.ts` covers: Fribb's TV vs MOVIE shape (the latter has
-`themoviedb_id.movie` as an array instead of `themoviedb_id.tv`), that the
-Fribb transform never throws across all ~15,800 real AniDB-matched entries,
-and the airing-snapshot arithmetic (`episodeProgress = nextEpisode - 1`,
-unix-seconds-to-Date conversion) against a real currently-airing entry.
+**`GET /health`** -- `200` + `database: "ok"` when the DB answers, `503` +
+`database: "error"` when it doesn't. Self-heals automatically once the DB
+comes back; no restart needed.
+
+**`GET /indexer/status`** -- the "is this actually running?" endpoint. For
+each job: has it ever run, when did it last checkpoint, and current row
+counts. Check this first, always, before assuming something's broken.
+
+**`GET /indexer/queue/status`** -- what's running/pending in both queues
+right now.
+
+**`POST /indexer/mapping/sync`**, **`/mapping/refresh`**,
+**`/mapping/fribb-refresh`**, **`/mapping/lists-refresh`**,
+**`/tvdb/incremental`**, **`/tvdb/full`** -- manual triggers, all
+admin-key gated (`x-admin-key` header), all go through the same queues the
+scheduler uses.
+
+## Troubleshooting
+
+**`Internal Server Error` on any route that touches the database.** Almost
+always a schema mismatch -- code expects a table/column that doesn't exist
+on your actual deployed database yet. Run `npm run db:migrate` against the
+same `DATABASE_URL` your deployment uses. `GET /indexer/status` will also
+directly name the missing table/column in its response instead of just
+failing blank, if you want to confirm before migrating.
+
+**Database isn't growing / nothing seems to be indexing.** Check
+`GET /indexer/status`. If `scheduler.enabled` is `false` and you don't have
+an external pinger hitting `/indexer/*`, that's the whole story -- nothing
+was ever told to run. Set `ENABLE_SCHEDULER=true` (and redeploy), or
+configure a pinger, then check `/indexer/status` again after a few minutes.
+
+**A DB connection blip.** The app reconnects on its own; nothing to do. If
+`/health` shows `503` and doesn't recover within a minute or two of your
+database actually being reachable again, that's worth reporting as a bug --
+it isn't expected behavior.
+
+## How it works
+
+Three of the four mapping sources are static file downloads (XML, Fribb,
+lists-main) -- no live scraping, no auth needed for any of them:
+
+| Source | Owns |
+|---|---|
+| `anime-list-master.xml` (Anime-Lists/anime-lists) | tvdb/tmdb ids, season+offset, per-episode mapping-list overrides -- **primary**, richest source |
+| Fribb-format JSON (Fribb/anime-lists) | anilist/mal/kitsu/livechart/anisearch/anime-planet/ann/animecountdown/simkl ids, `type` -- plus gap-fills tvdb/tmdb/imdb/season/offset for anime the XML source left completely unmapped (never overwrites what XML already found) |
+| `anime.json` (anime-and-manga/lists) | anilist/mal id, freshness-only -- fills gaps Fribb hasn't caught up on yet, never overwrites |
+| `anime-airing.json` (anime-and-manga/lists) | `airing` / `episodeProgress` / `nextEpisodeAt`, for currently-airing shows only |
+
+**No live AniDB API access.** AniDB's website sits behind Cloudflare, which
+blocks datacenter/cloud IPs by default, and AniDB's own policy is that its
+client API isn't meant to be hit from a VPS anyway -- only a residential
+connection. Rather than fight that, AniLink never calls AniDB directly. IDs
+come entirely from the sources above; TVDB (once its fetcher exists) is
+canonical for actual episode data, not just enrichment. Trade-off:
+specials/OVA/OP/ED/trailer episodes aren't mappable this way, since those
+only exist as distinct entries because of AniDB's own numbering scheme.
+Not supported for v1.
+
+**The resolver** (`src/mapping/resolver.ts`) is the piece that turns an
+AniDB-style regular episode number into the matching TVDB season/episode,
+using the per-episode `mapping-list` overrides when present and a plain
+season+offset formula otherwise. It also runs in reverse
+(`reverseResolveRegular`) -- given a TVDB episode TVDB actually has, work
+out which regular-episode number it corresponds to. That's what lets
+episode enumeration be driven entirely by TVDB's own episode list once
+fetched, instead of needing a separately-sourced total episode count.
+Tested against a round-trip property across all 430,332 unambiguous
+episodes in the real XML file (a small number of destinations are
+genuinely ambiguous in the source data itself -- e.g. Ghost in the Shell
+explicitly maps six different AniDB catalog entries to the same one TVDB
+episode -- and are excluded from that count rather than miscounted as
+passing).
+
+**Outbound requests** use a real browser `User-Agent` (`src/helpers/fetch.ts`)
+rather than Node's bare default, since a headerless automated request is
+exactly what some bot-detection heuristics flag regardless of whether the
+request is otherwise legitimate.
+
+## What's built vs. pending
+
+Built: full mapping ingest from all four sources, the resolver (forward +
+reverse, tested against real data), the job queue and scheduler (tested,
+including a regression test for a real `setInterval` 32-bit overflow bug
+found during development), the resumable/rate-limited per-id runner TVDB
+will use, `/mappings`, `/health`, and the full `/indexer/*` diagnostic and
+control surface.
+
+Pending: the actual TVDB API client. `src/mapping/tvdb-index.ts` has a
+clearly-marked stub where it goes -- the selection logic (which ids need
+fetching), the rate limiting, the resumable queue-integrated loop around it
+are all real and tested; only the actual HTTP call to TVDB itself isn't
+written yet. Once it exists, `description`/`image`/`episodes` in the
+`/mappings` response populate automatically, no other code needs to change.
+
+Also open: episode data for the ~56% of the catalog with no TVDB mapping at
+all. Nothing sources episode lists for those right now.
+
+## Testing
+
+```bash
+npm test                                # resolver: 19 assertions against real XML data
+npx tsx test/sources.test.ts            # Fribb + lists-main parsers against real JSON
+npx tsx test/response.test.ts           # /mappings response shape
+npx tsx test/queue.test.ts              # JobQueue: FIFO, priority preemption, dedup
+npx tsx test/scheduler.test.ts          # regression test for the setInterval overflow bug
+npx tsx test/sequential-runner.test.ts  # per-id ask/get/index/wait loop timing + resume + yield
+npx tsx test/tvdb-targets.test.ts       # "first run = everything, later runs = new+airing" (needs DATABASE_URL)
+npx tsx test/fribb-gapfill.test.ts      # Fribb gap-fill never overwrites XML data (needs DATABASE_URL)
+```
 
 `test/stress.manual.ts` runs every one of the ~16,865 real
-`anime-list-master.xml` entries through the resolver (both providers,
-episodes 1-30, both seasons) just to check nothing throws. Currently: 0
-crashes, 9,400 anime with no TVDB association, 74 using absolute numbering,
-1,428 with per-episode overrides.
-
-## A note on `type`
-
-`anime-list-master.xml` doesn't carry an anime `type` (TV/movie/OVA/etc) --
-that comes from Fribb's JSON or `animetitles.xml` in a later cross-reference
-pass. `ingestMapping()`'s upsert deliberately leaves `type` out of its
-`ON CONFLICT DO UPDATE SET` so that pass, whenever it runs, isn't overwritten
-by a mapping-only refresh.
-
-## Deploying
-
-Point `DATABASE_URL` at Supabase or Neon (not Render's own free Postgres --
-it's deleted 30 days after creation, which will quietly nuke an
-AniDB-rate-limited mirror that took days to build). Deploy the app itself to
-Render's free web service tier with `RENDER_KEEP_ALIVE=true` and `PUBLIC_URL`
-set to your Render URL, or just run it on your own always-on machine with
-both left off.
-
-Trigger the indexer routes on a schedule with a free external pinger like
-cron-job.org rather than an in-process timer -- more reliable on a tier that
-sleeps when idle, since the ping itself both wakes the instance and fires
-the job.
+`anime-list-master.xml` entries through the resolver just to check nothing
+throws: 0 crashes, 9,400 anime with no TVDB association, 74 using absolute
+numbering, 1,428 with per-episode overrides.

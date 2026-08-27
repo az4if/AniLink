@@ -3,41 +3,37 @@ import { JobQueue } from './queue.js';
 import { ingestMapping } from '../mapping/ingest.js';
 import { ingestFribb } from '../mapping/fribb.js';
 import { ingestListsIds, ingestAiring } from '../mapping/lists.js';
+import { runTvdbSync } from '../mapping/tvdb-index.js';
+import type { YieldCtx } from '../mapping/chunked-runner.js';
 
 /**
  * All GitHub-hosted JSON/XML sources share this one queue. There's no
  * external rate limit to respect here -- this is purely "only one of these
- * touches the DB at a time" so an hourly airing check and a monthly XML
- * resync can never race each other and corrupt a write.
+ * touches the DB at a time" so two of them can never race and corrupt a
+ * write.
  */
 export const jsonQueue = new JobQueue('json-sources');
 
 /**
- * Reserved for the TVDB fetcher (not built yet). Unlike jsonQueue, this one
- * matters for a real reason: TVDB has an actual per-key rate budget shared
- * across everything hitting it, so a scheduled priority job genuinely needs
- * to be able to make a long-running reconcile sweep step aside. Whatever
- * the TVDB active/reconcile jobs end up being, they plug in exactly the
- * same way jsonQueue's jobs do below -- runChunked() + this queue's
- * shouldYield() ctx is the whole pattern.
+ * TVDB jobs share this one instead. This one matters for a real reason:
+ * TVDB has an actual per-key rate budget shared across everything hitting
+ * it, so a scheduled priority job genuinely needs to be able to make a
+ * long-running reconcile sweep step aside.
  */
 export const tvdbQueue = new JobQueue('tvdb');
 
-// Higher number = more urgent. Airing data is both the most time-sensitive
-// (an episode can air within the hour) and the fastest job (~300 entries),
-// so it's worth letting it preempt a slow monthly XML resync if the two
-// ever land at the same moment.
-const PRIORITY = { airing: 30, ids: 20, xml: 10 } as const;
+// Higher number = more urgent.
+const PRIORITY = { mapping: 10, tvdbIncremental: 20, tvdbFull: 10 } as const;
 
 // setInterval's delay is a 32-bit signed int -- anything over ~24.8 days
 // (2,147,483,647ms) silently overflows and Node clamps it to firing every
-// 1ms instead. The "monthly" XML sync (30 days) hits that exactly, so
-// intervals aren't scheduled with a single long setInterval; a short,
-// always-safe "tick" checks elapsed time against each job's own interval
-// instead. This works for any configured interval, no matter how long.
+// 1ms instead. A 30-day interval hits that exactly, so intervals aren't
+// scheduled with a single long setInterval; a short, always-safe "tick"
+// checks elapsed time against each job's own interval instead. This works
+// for any configured interval, no matter how long.
 const TICK_INTERVAL_MS = 5 * 60 * 1000; // 5 min
 
-export function every(hours: number, jobName: string, priority: number, run: (ctx: { shouldYield: () => boolean }) => Promise<void>) {
+export function every(queue: JobQueue, hours: number, jobName: string, priority: number, run: (ctx: YieldCtx) => Promise<void>) {
   const intervalMs = hours * 60 * 60 * 1000;
   let lastRun = 0; // 0 = never run yet -- fires on the first tick after startup
 
@@ -45,7 +41,7 @@ export function every(hours: number, jobName: string, priority: number, run: (ct
     const now = Date.now();
     if (now - lastRun >= intervalMs) {
       lastRun = now;
-      jsonQueue.enqueue(jobName, priority, run);
+      queue.enqueue(jobName, priority, run);
     }
   };
 
@@ -60,20 +56,26 @@ export function startScheduler(): void {
     return;
   }
 
-  every(Config.scheduler.xmlSyncHours, 'scheduled:mapping-xml', PRIORITY.xml, async (ctx) => {
-    const result = await ingestMapping(undefined, ctx);
-    console.log('[scheduler] mapping-xml', result);
-  });
-
-  every(Config.scheduler.idsSyncHours, 'scheduled:mapping-ids', PRIORITY.ids, async (ctx) => {
+  // XML (primary: tvdb/tmdb ids, season/offset, mapping-list) -> Fribb
+  // (backfills the other provider ids + type) -> lists-main ids (fills any
+  // remaining gaps) -> lists-main airing (currently-airing snapshot), every
+  // run, in that order, all on one cadence.
+  every(jsonQueue, Config.scheduler.mappingSyncHours, 'scheduled:mapping-sync', PRIORITY.mapping, async (ctx) => {
+    const xml = await ingestMapping(undefined, ctx);
     const fribb = await ingestFribb(undefined, ctx);
-    const lists = await ingestListsIds(undefined, ctx);
-    console.log('[scheduler] mapping-ids', { fribb, lists });
+    const ids = await ingestListsIds(undefined, ctx);
+    const airing = await ingestAiring();
+    console.log('[scheduler] mapping-sync', { xml, fribb, ids, airing });
   });
 
-  every(Config.scheduler.airingSyncHours, 'scheduled:airing', PRIORITY.airing, async () => {
-    const result = await ingestAiring();
-    console.log('[scheduler] airing', result);
+  every(tvdbQueue, Config.scheduler.tvdbSyncHours, 'scheduled:tvdb-incremental', PRIORITY.tvdbIncremental, async (ctx) => {
+    const result = await runTvdbSync('incremental', ctx);
+    console.log('[scheduler] tvdb-incremental', result);
+  });
+
+  every(tvdbQueue, Config.scheduler.tvdbFullSyncHours, 'scheduled:tvdb-full', PRIORITY.tvdbFull, async (ctx) => {
+    const result = await runTvdbSync('full', ctx);
+    console.log('[scheduler] tvdb-full', result);
   });
 
   console.log('[scheduler] enabled', Config.scheduler);

@@ -63,11 +63,12 @@ export const Config = {
   // pinger. Either way, the same jobs go through the same priority queues.
   scheduler: {
     enabled: (process.env.ENABLE_SCHEDULER ?? 'false').toLowerCase() === 'true',
-    // "monthly" full mapping resync (anime-list-master.xml)
-    xmlSyncHours: Number(process.env.MAPPING_XML_SYNC_HOURS ?? 24 * 30),
-    // Fribb + lists-main id backfill
-    idsSyncHours: Number(process.env.MAPPING_IDS_SYNC_HOURS ?? 6),
-    // lists-main currently-airing snapshot -- most time-sensitive, shortest interval
-    airingSyncHours: Number(process.env.AIRING_SYNC_HOURS ?? 1)
+    // XML + Fribb + lists-main ids + lists-main airing, all refreshed together
+    mappingSyncHours: Number(process.env.MAPPING_SYNC_HOURS ?? 3),
+    // TVDB, new + currently-airing tvdb_ids only (naturally == everything
+    // on the very first run, since nothing's cached yet -- see tvdb-targets.ts)
+    tvdbSyncHours: Number(process.env.TVDB_SYNC_HOURS ?? 6),
+    // TVDB, full resync of every mapped tvdb_id regardless of cache state
+    tvdbFullSyncHours: Number(process.env.TVDB_FULL_SYNC_HOURS ?? 24 * 30)
   }
 };

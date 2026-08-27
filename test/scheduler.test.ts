@@ -1,4 +1,4 @@
-import { every } from '../src/scheduler/index.js';
+import { every, jsonQueue } from '../src/scheduler/index.js';
 
 let pass = 0;
 let fail = 0;
@@ -32,14 +32,14 @@ async function main() {
   // Absurdly large -- 100,000 hours is ~11.4 years, nowhere near
   // expressible as a single setInterval delay in ms.
   let hugeIntervalFireCount = 0;
-  every(100_000, 'test:huge-interval-job', 1, async () => {
+  every(jsonQueue, 100_000, 'test:huge-interval-job', 1, async () => {
     hugeIntervalFireCount++;
   });
 
   // Tiny -- fires almost immediately, proving `every()` still works at all
   // (not just "doesn't crash").
   let tinyIntervalFireCount = 0;
-  every(1 / 3_600_000, 'test:tiny-interval-job', 1, async () => {
+  every(jsonQueue, 1 / 3_600_000, 'test:tiny-interval-job', 1, async () => {
     tinyIntervalFireCount++;
   });
 

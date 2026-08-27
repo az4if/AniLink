@@ -5,6 +5,7 @@ import { db, schema } from '../db/index.js';
 import { ingestMapping } from '../mapping/ingest.js';
 import { ingestFribb } from '../mapping/fribb.js';
 import { ingestListsIds, ingestAiring } from '../mapping/lists.js';
+import { runTvdbSync } from '../mapping/tvdb-index.js';
 import { jsonQueue, tvdbQueue } from '../scheduler/index.js';
 
 export const indexerRoutes = new Hono();
@@ -71,37 +72,93 @@ indexerRoutes.get('/queue/status', (c) => {
 // missing entirely, nothing has triggered it -- that's the first thing to
 // check before assuming there's a bug: is the scheduler on
 // (ENABLE_SCHEDULER=true), or is an external pinger actually configured?
+//
+// Every piece below is independently try/caught. A diagnostic endpoint
+// that itself crashes with no explanation defeats the purpose -- if your
+// DB is missing a table (e.g. schema migrated before a later column/table
+// was added), this reports exactly that instead of a bare 500.
 indexerRoutes.get('/status', async (c) => {
-  const jobNames = ['mapping-xml', 'mapping-fribb', 'mapping-lists-ids'];
+  async function safe<T>(label: string, fn: () => Promise<T>): Promise<T | { error: string }> {
+    try {
+      return await fn();
+    } catch (err) {
+      console.error(`[indexer/status] ${label} failed:`, err);
+      return { error: (err as Error).message };
+    }
+  }
+
+  const jobNames = ['mapping-xml', 'mapping-fribb', 'mapping-lists-ids', 'tvdb-reconcile', 'tvdb-full-reconcile'];
   const jobs = await Promise.all(
-    jobNames.map(async (jobName) => {
-      const row = await db.query.indexerState.findFirst({ where: eq(schema.indexerState.jobName, jobName) });
-      return {
-        job: jobName,
-        everRun: Boolean(row),
-        cursor: row?.cursor ?? null, // non-zero means "mid-pass, will resume from here"
-        lastCheckpoint: row?.updatedAt ?? null
-      };
-    })
+    jobNames.map((jobName) =>
+      safe(`indexer_state:${jobName}`, async () => {
+        const row = await db.query.indexerState.findFirst({ where: eq(schema.indexerState.jobName, jobName) });
+        return {
+          job: jobName,
+          everRun: Boolean(row),
+          cursor: row?.cursor ?? null, // non-zero means "mid-pass, will resume from here"
+          lastCheckpoint: row?.updatedAt ?? null
+        };
+      })
+    )
   );
 
-  const [mappingCount, animeCount, tvdbCacheCount] = await Promise.all([
-    db.select({ count: sql<number>`count(*)::int` }).from(schema.mapping).then((r) => r[0].count),
-    db.select({ count: sql<number>`count(*)::int` }).from(schema.anime).then((r) => r[0].count),
-    db.select({ count: sql<number>`count(*)::int` }).from(schema.tvdbCache).then((r) => r[0].count)
-  ]);
+  const rowCounts = {
+    mapping: await safe('count:mapping', async () => (await db.select({ n: sql<number>`count(*)::int` }).from(schema.mapping))[0].n),
+    anime: await safe('count:anime', async () => (await db.select({ n: sql<number>`count(*)::int` }).from(schema.anime))[0].n),
+    tvdb_cache: await safe(
+      'count:tvdb_cache',
+      async () => (await db.select({ n: sql<number>`count(*)::int` }).from(schema.tvdbCache))[0].n
+    )
+  };
 
   return c.json({
     queues: { json: jsonQueue.status(), tvdb: tvdbQueue.status() },
     jobs,
-    rowCounts: { mapping: mappingCount, anime: animeCount, tvdb_cache: tvdbCacheCount },
+    rowCounts,
     scheduler: { enabled: Config.scheduler.enabled }
   });
 });
 
-// Placeholders for the next build phase -- once the TVDB fetcher exists it
-// plugs into tvdbQueue exactly the way the routes above plug into
-// jsonQueue: enqueue(id, priority, async (ctx) => runChunked(..., ctx)):
-//   POST /indexer/tvdb/active/run      (currently-airing shows, high priority)
-//   POST /indexer/tvdb/reconcile/run   (full catalog sweep, low priority, resumable)
-//   POST /indexer/merge/run
+// POST /indexer/mapping/sync
+// Runs all four mapping sources in sequence -- XML, Fribb, lists-main ids,
+// lists-main airing -- exactly what the scheduler does on MAPPING_SYNC_HOURS.
+// The three routes above still exist individually for targeted debugging.
+indexerRoutes.post('/mapping/sync', async (c) => {
+  if (!requireAdmin(c.req.header('x-admin-key'))) return c.json({ error: 'unauthorized' }, 401);
+  jsonQueue.enqueue('manual:mapping-sync', 10, async (ctx) => {
+    const xml = await ingestMapping(undefined, ctx);
+    const fribb = await ingestFribb(undefined, ctx);
+    const ids = await ingestListsIds(undefined, ctx);
+    const airing = await ingestAiring();
+    console.log('[indexer] mapping-sync', { xml, fribb, ids, airing });
+  });
+  return c.json({ queued: true, queue: jsonQueue.status() });
+});
+
+// POST /indexer/tvdb/incremental
+// Only tvdb_ids that are currently airing or have never been fetched --
+// naturally covers everything on the very first run (nothing's cached
+// yet), and only the new/airing subset after that. See tvdb-targets.ts.
+// NOTE: the actual TVDB API call is still a stub (see tvdb-index.ts) --
+// this exercises the real selection/queue/rate-limit plumbing, but won't
+// populate tvdb_cache with real data until a TVDB client is built.
+indexerRoutes.post('/tvdb/incremental', async (c) => {
+  if (!requireAdmin(c.req.header('x-admin-key'))) return c.json({ error: 'unauthorized' }, 401);
+  tvdbQueue.enqueue('manual:tvdb-incremental', 20, async (ctx) => {
+    const result = await runTvdbSync('incremental', ctx);
+    console.log('[indexer] tvdb-incremental', result);
+  });
+  return c.json({ queued: true, queue: tvdbQueue.status() });
+});
+
+// POST /indexer/tvdb/full
+// Every mapped tvdb_id, regardless of cache state. Slow -- meant to be run
+// rarely (TVDB_FULL_SYNC_HOURS, default 30 days).
+indexerRoutes.post('/tvdb/full', async (c) => {
+  if (!requireAdmin(c.req.header('x-admin-key'))) return c.json({ error: 'unauthorized' }, 401);
+  tvdbQueue.enqueue('manual:tvdb-full', 10, async (ctx) => {
+    const result = await runTvdbSync('full', ctx);
+    console.log('[indexer] tvdb-full', result);
+  });
+  return c.json({ queued: true, queue: tvdbQueue.status() });
+});

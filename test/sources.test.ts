@@ -37,7 +37,15 @@ const dir = new URL('.', import.meta.url).pathname;
     animeNewsNetworkId: 13,
     animeCountdownId: 37089,
     animePlanetId: 'cowboy-bebop',
-    type: 'TV'
+    type: 'TV',
+    tvdbId: 76885,
+    tmdbTvId: 30991,
+    tmdbMovieIds: null,
+    imdbIds: ['tt0213338'],
+    defaultTvdbSeason: 1,
+    tvdbEpisodeOffset: null,
+    defaultTmdbSeason: 1,
+    tmdbEpisodeOffset: null
   });
 
   const mononoke = withId.find((e) => e.anidb_id === 7)!;
@@ -52,7 +60,15 @@ const dir = new URL('.', import.meta.url).pathname;
     animeNewsNetworkId: 197,
     animeCountdownId: 36228,
     animePlanetId: 'princess-mononoke',
-    type: 'MOVIE'
+    type: 'MOVIE',
+    tvdbId: null,
+    tmdbTvId: null,
+    tmdbMovieIds: [128],
+    imdbIds: ['tt0119698'],
+    defaultTvdbSeason: null,
+    tvdbEpisodeOffset: null,
+    defaultTmdbSeason: null,
+    tmdbEpisodeOffset: null
   });
 
   // sanity: toFribbDbRow should never throw across the whole real file

@@ -2,6 +2,7 @@ import { sql, eq } from 'drizzle-orm';
 import { Config } from '../config.js';
 import { db, schema } from '../db/index.js';
 import { runChunked, type YieldCtx } from './chunked-runner.js';
+import { fetchWithHeaders } from '../helpers/fetch.js';
 
 type ListsIdEntry = { idAL?: number; idAniDB?: number; idMal?: number };
 
@@ -19,7 +20,7 @@ export function toAiringFields(e: ListsAiringEntry): { episodeProgress: number |
 }
 
 async function downloadJson<T>(url: string, label: string): Promise<T> {
-  const res = await fetch(url);
+  const res = await fetchWithHeaders(url);
   if (!res.ok) throw new Error(`Failed to download ${label}: HTTP ${res.status}`);
   return res.json();
 }

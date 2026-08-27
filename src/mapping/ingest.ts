@@ -3,10 +3,11 @@ import { Config } from '../config.js';
 import { db, schema } from '../db/index.js';
 import { parseAnimeListXml, type MappingRow } from './xml-parser.js';
 import { runChunked, type YieldCtx } from './chunked-runner.js';
+import { fetchWithHeaders } from '../helpers/fetch.js';
 import type { MappingListEntry } from '../db/schema.js';
 
 async function downloadXml(): Promise<string> {
-  const res = await fetch(Config.sources.animeListMasterXmlUrl);
+  const res = await fetchWithHeaders(Config.sources.animeListMasterXmlUrl);
   if (!res.ok) throw new Error(`Failed to download anime-list-master.xml: HTTP ${res.status}`);
   return res.text();
 }

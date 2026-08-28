@@ -106,6 +106,23 @@ For how this works internally, why it's built this way, and testing, see
 `POST` routes require an `x-admin-key` header matching `ADMIN_KEY` -- unless
 `ADMIN_KEY` is unset/empty, in which case they're open to anyone.
 
+Generate a key and set it in `.env`:
+
+```bash
+openssl rand -hex 32
+```
+
+```
+ADMIN_KEY=<paste-the-generated-key-here>
+```
+
+Then include it on every `POST /indexer/*` call:
+
+```bash
+curl -X POST http://localhost:3000/indexer/mapping/sync \
+  -H "x-admin-key: your-admin-key-here"
+```
+
 `GET /mappings` response:
 
 ```jsonc

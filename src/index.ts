@@ -8,6 +8,7 @@ import { Config } from './config.js';
 import { db } from './db/index.js';
 import { startKeepAlive } from './helpers/self-poll.js';
 import { startScheduler } from './scheduler/index.js';
+import { rateLimiter } from './helpers/rate-limit.js';
 import { indexerRoutes } from './routes/indexer.routes.js';
 import { mappingsRoutes } from './routes/mappings.routes.js';
 
@@ -22,6 +23,11 @@ const app = new Hono();
 const allowedOrigins =
   Config.corsOrigin === '*' ? '*' : Config.corsOrigin.split(',').map((origin) => origin.trim()).filter(Boolean);
 app.use('/*', cors({ origin: allowedOrigins }));
+
+// RATE_LIMIT=100 (default) -> 100 requests per IP per RATE_LIMIT_WINDOW_SEC
+// (default 60s), everywhere including /indexer/* (on top of its own
+// ADMIN_KEY check) and /mappings/*. RATE_LIMIT=0 -> unlimited.
+app.use('/*', rateLimiter(Config.rateLimit));
 
 // serves public/favicon.ico, public/favicon.png, public/index.html (as static assets)
 app.use('/*', serveStatic({ root: './public' }));

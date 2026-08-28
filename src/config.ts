@@ -61,6 +61,13 @@ export const Config = {
   // how this is parsed and applied.
   corsOrigin: process.env.CORS_ORIGIN ?? '*',
 
+  // Per-IP rate limit, applied to every route. 0 disables it (unlimited).
+  // See src/helpers/rate-limit.ts.
+  rateLimit: {
+    limit: Number(process.env.RATE_LIMIT ?? 100),
+    windowMs: Number(process.env.RATE_LIMIT_WINDOW_SEC ?? 60) * 1000
+  },
+
   // In-process scheduler. Off by default -- on a free-tier host that sleeps
   // when idle, an external pinger (cron-job.org) hitting POST /indexer/*
   // is more reliable than a timer inside a process that might not be

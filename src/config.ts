@@ -53,7 +53,10 @@ export const Config = {
       process.env.ANIME_AIRING_JSON_URL ?? 'https://raw.githubusercontent.com/anime-and-manga/lists/main/anime-airing.json'
   },
 
-  adminKey: process.env.ADMIN_KEY ?? 'change-me',
+  // Unset or empty -> POST /indexer/* is open, no key required (see
+  // requireAdmin in indexer.routes.ts). Set a real value before deploying
+  // publicly.
+  adminKey: process.env.ADMIN_KEY ?? '',
 
   // CORS. "*" (the default) allows any origin. Set to a comma-separated
   // allow-list -- e.g. "https://domainone.com,https://domaintwo.com" -- to

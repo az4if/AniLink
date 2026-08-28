@@ -11,7 +11,11 @@ import { jsonQueue, tvdbQueue } from '../scheduler/index.js';
 export const indexerRoutes = new Hono();
 
 function requireAdmin(headerValue: string | undefined): boolean {
-  return Boolean(headerValue) && headerValue === Config.adminKey;
+  // No ADMIN_KEY configured (unset or empty) -> open, no key required.
+  // Intentional default for local/dev use; set ADMIN_KEY before deploying
+  // publicly or every POST /indexer/* route below is callable by anyone.
+  if (!Config.adminKey) return true;
+  return headerValue === Config.adminKey;
 }
 
 // Every job below is enqueued into jsonQueue rather than run inline -- the

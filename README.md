@@ -31,9 +31,12 @@ For how this works internally, why it's built this way, and testing, see
 4. **Seed the mapping table:**
    ```bash
    npm run dev
-   curl -X POST http://localhost:3000/indexer/mapping/sync -H "x-admin-key: change-me"
+   curl -X POST http://localhost:3000/indexer/mapping/sync
    ```
-   Change `ADMIN_KEY` in `.env` before deploying publicly.
+   No `x-admin-key` header needed here since `ADMIN_KEY` is unset by
+   default (open). Set `ADMIN_KEY` in `.env` and pass it as `x-admin-key`
+   on every `POST /indexer/*` call **before deploying publicly** -- left
+   unset, anyone can trigger these jobs.
 5. **Confirm it worked:**
    ```bash
    curl http://localhost:3000/indexer/status
@@ -52,7 +55,7 @@ For how this works internally, why it's built this way, and testing, see
 |---|---|---|
 | `DATABASE_URL` | *(required)* | Postgres connection string. |
 | `PORT` | `3000` | API port. |
-| `ADMIN_KEY` | `change-me` | Required as `x-admin-key` on every `POST /indexer/*`. Change before deploying publicly. |
+| `ADMIN_KEY` | *(empty)* | Required as `x-admin-key` on every `POST /indexer/*` -- but only if set. Unset or empty (the default) means those routes are **open, no key required**. Set a real value before deploying publicly. |
 | `CORS_ORIGIN` | `*` | `*` allows any origin. Or a comma-separated allow-list, e.g. `https://domainone.com,https://domaintwo.com`, to restrict to specific origins only. |
 | `RATE_LIMIT` | `100` | Max requests per IP per `RATE_LIMIT_WINDOW_SEC`, applied to every route. `0` disables it (unlimited). |
 | `RATE_LIMIT_WINDOW_SEC` | `60` | Window (seconds) the `RATE_LIMIT` count applies to. |
@@ -84,7 +87,8 @@ For how this works internally, why it's built this way, and testing, see
 | POST | `/indexer/tvdb/incremental` | new + airing tvdb_ids |
 | POST | `/indexer/tvdb/full` | every mapped tvdb_id |
 
-`POST` routes require an `x-admin-key` header matching `ADMIN_KEY`.
+`POST` routes require an `x-admin-key` header matching `ADMIN_KEY` -- unless
+`ADMIN_KEY` is unset/empty, in which case they're open to anyone.
 
 `GET /mappings` response:
 

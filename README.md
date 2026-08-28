@@ -43,9 +43,25 @@ For how this works internally, why it's built this way, and testing, see
    ```
    `rowCounts.mapping` should read ~16,000-17,000 once the sync finishes.
    0 or an error -> see [Troubleshooting](#troubleshooting).
-6. **Deploy** wherever you like, with the same env vars. Host sleeps when
-   idle (Render free tier)? Also set `RENDER_KEEP_ALIVE=true` and
-   `PUBLIC_URL`.
+6. **Deploy** wherever you like, with the same env vars. On Render,
+   create a **Web Service** from this repo and set:
+   - **Build Command** -- runs once when building:
+     ```
+     npm install && npm run build
+     ```
+     (the `build` step runs `tsc`, producing `dist/`)
+   - **Start Command** -- runs to actually launch your service, and
+     re-runs on every restart:
+     ```
+     npm run db:migrate && npm start
+     ```
+     Running the migration here means the schema stays in sync
+     automatically on every deploy/restart, instead of you having to
+     re-run `db:migrate` by hand each time (see
+     [Troubleshooting](#troubleshooting)).
+
+   Host sleeps when idle (Render free tier)? Also set
+   `RENDER_KEEP_ALIVE=true` and `PUBLIC_URL`.
 7. **Turn on scheduling:** set `ENABLE_SCHEDULER=true`. Nothing runs
    automatically until this is set.
 

@@ -55,6 +55,12 @@ export const Config = {
 
   adminKey: process.env.ADMIN_KEY ?? 'change-me',
 
+  // CORS. "*" (the default) allows any origin. Set to a comma-separated
+  // allow-list -- e.g. "https://domainone.com,https://domaintwo.com" -- to
+  // restrict browser access to those origins only. See src/index.ts for
+  // how this is parsed and applied.
+  corsOrigin: process.env.CORS_ORIGIN ?? '*',
+
   // In-process scheduler. Off by default -- on a free-tier host that sleeps
   // when idle, an external pinger (cron-job.org) hitting POST /indexer/*
   // is more reliable than a timer inside a process that might not be

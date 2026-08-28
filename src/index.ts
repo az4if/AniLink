@@ -1,6 +1,7 @@
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
+import { cors } from 'hono/cors';
 import { sql } from 'drizzle-orm';
 import { readFileSync } from 'node:fs';
 import { Config } from './config.js';
@@ -11,6 +12,16 @@ import { indexerRoutes } from './routes/indexer.routes.js';
 import { mappingsRoutes } from './routes/mappings.routes.js';
 
 const app = new Hono();
+
+// CORS_ORIGIN=* (default) -> reflect any origin, wide open.
+// CORS_ORIGIN=https://domainone.com,https://domaintwo.com -> only those
+// origins get Access-Control-Allow-Origin; everyone else's browser requests
+// are blocked client-side. Applied globally so it covers the static
+// landing page, /health, and both route groups below. Must run before
+// those handlers so preflight OPTIONS requests are answered here first.
+const allowedOrigins =
+  Config.corsOrigin === '*' ? '*' : Config.corsOrigin.split(',').map((origin) => origin.trim()).filter(Boolean);
+app.use('/*', cors({ origin: allowedOrigins }));
 
 // serves public/favicon.ico, public/favicon.png, public/index.html (as static assets)
 app.use('/*', serveStatic({ root: './public' }));

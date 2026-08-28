@@ -53,6 +53,7 @@ For how this works internally, why it's built this way, and testing, see
 | `DATABASE_URL` | *(required)* | Postgres connection string. |
 | `PORT` | `3000` | API port. |
 | `ADMIN_KEY` | `change-me` | Required as `x-admin-key` on every `POST /indexer/*`. Change before deploying publicly. |
+| `CORS_ORIGIN` | `*` | `*` allows any origin. Or a comma-separated allow-list, e.g. `https://domainone.com,https://domaintwo.com`, to restrict to specific origins only. |
 | `PUBLIC_URL` | *(empty)* | Render keep-alive self-ping target. Blank on localhost. |
 | `RENDER_KEEP_ALIVE` | `false` | `true` only on Render free tier. |
 | `ENABLE_SCHEDULER` | `false` | Turns on the in-process scheduler. |

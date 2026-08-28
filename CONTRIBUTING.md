@@ -3,6 +3,13 @@
 For deploy instructions, see [README.md](README.md). This is the "why is
 it built this way" and "what's actually tested" doc.
 
+## License
+
+AniLink is distributed under the terms in [LICENSE.md](LICENSE.md) (a
+custom, non-commercial license). By submitting a contribution, you agree
+it's provided under those same terms and that the project maintainer may
+distribute it as part of AniLink.
+
 ## Sources
 
 Three of the four mapping sources are static file downloads -- no live

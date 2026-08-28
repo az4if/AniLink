@@ -116,3 +116,11 @@ blank, if you want to confirm first.
 **DB connection blip.** Self-heals automatically, nothing to do. If
 `/health` stays `503` for minutes after the DB is actually reachable again,
 that's a bug worth reporting.
+
+## License
+
+AniLink is licensed under a custom **Non-Commercial License** -- free to
+use, modify, and self-host for personal, educational, or non-profit
+purposes, with attribution. Commercial use requires prior written
+permission from the copyright holder. See [LICENSE.md](LICENSE.md) for
+full terms.

@@ -193,7 +193,14 @@
           <option value="anidb_id" selected>anidb_id</option>
           <option value="mal_id">mal_id</option>
           <option value="anilist_id">anilist_id</option>
+          <option value="kitsu_id">kitsu_id</option>
+          <option value="anisearch_id">anisearch_id</option>
+          <option value="notifymoe_id">notifymoe_id</option>
+          <option value="livechart_id">livechart_id</option>
           <option value="thetvdb_id">thetvdb_id</option>
+          <option value="themoviedb_id">themoviedb_id</option>
+          <option value="imdb_id">imdb_id</option>
+          <option value="animeplanet_id">animeplanet_id</option>
         </select>
         <input type="text" id="value" value="23" inputmode="numeric" aria-label="id value">
         <button id="send">GET /mappings</button>
@@ -205,12 +212,15 @@
 
   <section id="endpoint">
     <h2>Endpoint</h2>
-    <p class="sub">One endpoint, four ways to look a title up. Whichever id you already have works.</p>
+    <p class="sub">One endpoint, eleven ways to look a title up. Whichever mapped id you already have works.</p>
     <div class="endpoints">
       <div class="endpoint"><span class="verb">GET</span><code>/mappings?anidb_id=18278</code></div>
       <div class="endpoint"><span class="verb">GET</span><code>/mappings?mal_id=57181</code></div>
       <div class="endpoint"><span class="verb">GET</span><code>/mappings?anilist_id=170942</code></div>
       <div class="endpoint"><span class="verb">GET</span><code>/mappings?thetvdb_id=429934</code></div>
+      <div class="endpoint"><span class="verb">GET</span><code>/mappings?themoviedb_id=37854</code></div>
+      <div class="endpoint"><span class="verb">GET</span><code>/mappings?imdb_id=tt0388629</code></div>
+      <div class="endpoint"><span class="verb">GET</span><code>/mappings?animeplanet_id=one-piece</code></div>
     </div>
   </section>
 
@@ -302,6 +312,11 @@
   }
 
   sendBtn.addEventListener('click', () => runQuery(providerSel.value, valueInput.value));
+  providerSel.addEventListener('change', () => {
+    const textId = ['imdb_id', 'animeplanet_id'].includes(providerSel.value);
+    valueInput.inputMode = textId ? 'text' : 'numeric';
+    valueInput.placeholder = textId ? (providerSel.value === 'imdb_id' ? 'tt0388629' : 'one-piece') : 'numeric id';
+  });
   valueInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') runQuery(providerSel.value, valueInput.value); });
 
   document.querySelectorAll('.converge .node').forEach((node) => {

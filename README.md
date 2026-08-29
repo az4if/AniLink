@@ -113,7 +113,7 @@ For how this works internally, why it's built this way, and testing, see
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/mappings?anidb_id=` | also accepts `mal_id`, `anilist_id`, `thetvdb_id` |
+| GET | `/mappings?anidb_id=` | Also accepts `mal_id`, `anilist_id`, `kitsu_id`, `anisearch_id`, `notifymoe_id`, `livechart_id`, `thetvdb_id`, `themoviedb_id`, `imdb_id`, and `animeplanet_id`. |
 | GET | `/health` | `200` when DB reachable, `503` when not -- self-heals, no restart needed |
 | GET | `/indexer/status` | job history + row counts. Check this first for any issue. |
 | GET | `/indexer/queue/status` | what's running/pending right now |

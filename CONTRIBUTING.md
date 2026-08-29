@@ -12,8 +12,8 @@ distribute it as part of AniLink.
 
 ## Sources
 
-Three of the four mapping sources are static file downloads -- no live
-scraping, no auth needed:
+The remote mapping sources are static downloads; the optional local
+`ani.zip` source is imported without making a network request:
 
 | Source | Owns |
 |---|---|
@@ -21,6 +21,8 @@ scraping, no auth needed:
 | Fribb-format JSON (Fribb/anime-lists) | anilist/mal/kitsu/livechart/anisearch/anime-planet/ann/animecountdown/simkl ids, `type` -- plus gap-fills tvdb/tmdb/imdb/season/offset for anime the XML source left completely unmapped (never overwrites what XML already found) |
 | `anime.json` (anime-and-manga/lists) | anilist/mal id, freshness-only -- fills gaps Fribb hasn't caught up on yet, never overwrites |
 | `anime-airing.json` (anime-and-manga/lists) | `airing` / `episodeProgress` / `nextEpisodeAt`, currently-airing shows only |
+| local `ani.zip` | optional AniDB cross-reference seed/gap-fill; the complete original JSON records are retained in `ani_zip_cache` |
+| `api.ani.zip` | remote multilingual titles, provider-ID gap fills, direct AniDB/TVDB episode metadata, and artwork; raw responses remain separately cached |
 
 ## Why no live AniDB API access
 
@@ -28,8 +30,8 @@ AniDB's website sits behind Cloudflare, which blocks datacenter/cloud IPs
 by default, and AniDB's own policy is that its client API isn't meant to be
 hit from a VPS anyway -- only a residential connection. Rather than fight
 that, AniLink never calls AniDB directly. IDs come entirely from the
-sources above; TVDB is canonical for actual episode data, not just
-enrichment.
+sources above. TVDB is preferred for actual episode data; mapped TMDB data
+is the fallback when TVDB has no ID or has not been fetched yet.
 
 Trade-off: specials/OVA/OP/ED/trailer episodes aren't mappable this way,
 since those only exist as distinct entries because of AniDB's own
@@ -67,9 +69,10 @@ Nothing runs automatically until `ENABLE_SCHEDULER=true`. Alternative: an
 outside pinger (cron-job.org) calling `POST /indexer/*` on a timer instead.
 Either works; you need one of them.
 
-Once on, two independent lanes:
+Once on, three independent lanes:
 
-1. **Every `MAPPING_SYNC_HOURS`** -- re-downloads all four mapping sources
+1. **Every `MAPPING_SYNC_HOURS`** -- imports optional ani.zip and refreshes
+   the four remote mapping sources
    and updates `mapping`. Knows exactly which anidb_ids are new since last
    time.
 2. **Every `TVDB_SYNC_HOURS`** -- asks TVDB for episode data, but only for
@@ -79,20 +82,31 @@ Once on, two independent lanes:
    **`TVDB_FULL_SYNC_HOURS`** ignores that shortcut and re-asks about
    every mapped anime, catching anything that slipped through (e.g. an
    anime that gained a TVDB mapping later on).
+3. **Every `TMDB_SYNC_HOURS`** -- indexes mapped TV/movie metadata,
+   episodes, translations, and artwork using the same new-or-airing/full
+   policy. TMDB artwork is stored even when TVDB exists.
+4. **Every `ANI_ZIP_SYNC_HOURS`** -- enriches records with AniList, MAL, or
+   Kitsu IDs from the remote API. Existing primary mappings are never
+   overwritten; only gaps are filled, while all original response fields
+   stay available for serving.
 
-Mapping jobs queue behind mapping jobs, TVDB jobs queue behind TVDB jobs --
-nothing in the same lane overlaps and corrupts a write. The two lanes are
+Mapping jobs queue behind mapping jobs; each provider has its own queue --
+nothing in the same lane overlaps and corrupts a write. The lanes are
 otherwise independent.
 
 ## The queue
 
-Two queues, `src/scheduler/queue.ts`:
+Three queues, `src/scheduler/queue.ts`:
 
-- **`jsonQueue`** -- the four mapping sources. No external rate limit;
+- **`jsonQueue`** -- local archive plus the four remote mapping sources. No external rate limit;
   exists so two of them can't write to the DB at once.
 - **`tvdbQueue`** -- TVDB jobs. Matters for a real reason: TVDB has one
   shared rate budget, so a fast urgent job (new+airing check) needs to be
   able to make a slow full sweep step aside.
+- **`tmdbQueue`** -- TMDB TV/movie jobs, isolated so a long catalog pass
+  cannot block mapping or TVDB refreshes.
+- **`aniZipQueue`** -- remote ani.zip enrichment, including a per-title
+  `INDEX_DELAY` so its full sweep is resumable and gentle.
 
 "Step aside" is cooperative yielding, not getting killed mid-write: the
 running job checks a `shouldYield()` flag between each unit of work and,
@@ -101,7 +115,8 @@ run of that job resumes from there instead of starting over.
 
 ## What's built vs. pending
 
-**Built:** full mapping ingest from all four sources; the resolver
+**Built:** full mapping ingest from the four remote sources plus optional
+lossless ani.zip cross-reference import; the resolver
 (forward + reverse, tested against real data); the job queue and
 scheduler (tested, including a regression test for a real `setInterval`
 32-bit overflow bug found during development -- a 30-day interval
@@ -128,14 +143,15 @@ episode list into the public `/mappings` response shape via
 `reverseResolveRegular()` -- including the tvdb_id-shared-by-multiple-
 anidb-entries case (Ghost in the Shell), where each entry gets its own
 episode numbers off its own offset against the same shared TVDB data.
-`description`/`image`/`episodes` populate automatically once
-`POST /indexer/tvdb/*` has run for a title; `mappings.routes.ts` was
-already written to prefer `anime.data` over the plain `mapping` fallback
-the moment it exists, so no route code needed to change.
+The full TVDB extended response (including aliases, remote IDs, trailers,
+airing schedule and artwork) is retained in `tvdb_cache`, not narrowed to
+the public schema. TMDB has equivalent full-payload caching in
+`tmdb_cache`, including images/translations/credits and per-season episode
+data. `merge.ts` uses TVDB as its preferred metadata/episode source,
+falls back to TMDB, and returns provenance-preserving artwork from both.
 
-**Also open:** episode data for the ~56% of the catalog with no TVDB
-mapping at all. Nothing sources episode lists for those right now.
-Specials/OVA/OP/ED/trailer episodes also aren't mappable even for titles
+**Still open:** episode data for titles with neither a TVDB nor TMDB
+mapping. Specials/OVA/OP/ED/trailer episodes also aren't mappable even for titles
 with TVDB coverage -- see "Why no live AniDB API access" above; not
 supported for v1.
 
@@ -147,6 +163,9 @@ npx tsx test/sources.test.ts            # Fribb + lists-main parsers against rea
 npx tsx test/response.test.ts           # /mappings response shape
 npx tsx test/merge.test.ts               # TVDB episode -> AniDB number reversal, incl. absolute numbering + English title/overview pass-through
 npx tsx test/tvdb-client.test.ts         # login/token caching, pagination, 401-retry, English-translation fetch/skip/404-handling (mocked fetch, no real TVDB call)
+npx tsx test/tmdb-client.test.ts         # TMDB full payload, artwork and season/absolute episode normalization (mocked fetch)
+npx tsx test/ani-zip.test.ts             # local archive normalization and lossless raw record handling
+npx tsx test/ani-zip-client.test.ts      # remote multilingual titles, mappings, episode data, and artwork normalization
 npx tsx test/queue.test.ts              # JobQueue: FIFO, priority preemption, dedup
 npx tsx test/scheduler.test.ts          # regression test for the setInterval overflow bug
 npx tsx test/sequential-runner.test.ts  # per-id ask/get/index/wait loop timing + resume + yield
@@ -162,4 +181,3 @@ numbering, 1,428 with per-episode overrides.
 `test/merge-integration.manual.ts` (needs `DATABASE_URL`) exercises
 `mergeTvdbIntoAnime()` against a real database, including the shared-
 tvdb_id/different-offset case.
-

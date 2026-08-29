@@ -1,5 +1,6 @@
 import { Config } from '../config.js';
 import { fetchWithHeaders } from '../helpers/fetch.js';
+import { tvdbArtworkType, type Artwork } from './artworks.js';
 
 export type TvdbEpisode = {
   seasonNumber: number;
@@ -20,10 +21,16 @@ export type TvdbEpisode = {
 };
 
 export type TvdbSeriesData = {
+  id?: number;
   status: string | null;
   image: string | null;
   overview: string | null;
   episodes: TvdbEpisode[];
+  artworks?: Artwork[];
+  // The complete extended TVDB record. This intentionally retains the
+  // fields clients may need: aliases, remoteIds, trailers, airsDays,
+  // airsTime, translations, characters and any future API additions.
+  raw?: Record<string, unknown>;
 };
 
 type CachedToken = { token: string; fetchedAt: number };
@@ -90,21 +97,38 @@ async function tvdbGet(path: string, forceNewToken = false): Promise<any> {
 }
 
 /**
- * Series-level fields (status/image/overview). Deliberately `?short=true`
- * on /extended -- this skips characters/artwork/etc, which this project
- * has no use for, keeping the payload small. Episode data is NOT taken
- * from here: /extended's embedded episode list doesn't let you pin the
+ * Series-level fields plus all extended metadata and artworks. Episode data
+ * is NOT taken from the extended response: its embedded episode list doesn't let you pin the
  * season-type to "official" the way the dedicated episodes endpoint does,
  * and for long-running anime (many hundreds of episodes) it isn't
  * reliably paginated the way /series/{id}/episodes/{season-type} is.
  */
 async function fetchSeriesSummary(tvdbId: number): Promise<Omit<TvdbSeriesData, 'episodes'>> {
-  const body = await tvdbGet(`/series/${tvdbId}/extended?short=true`);
+  const body = await tvdbGet(`/series/${tvdbId}/extended`);
   const series = body?.data ?? {};
   return {
+    id: tvdbId,
     status: series.status?.name ?? null,
     image: series.image ?? null,
-    overview: series.overview ?? null
+    overview: series.overview ?? null,
+    artworks: (series.artworks ?? [])
+      .map((artwork: any) => {
+        if (typeof artwork?.image !== 'string' || !artwork.image) return null;
+        return {
+          url: artwork.image,
+          thumbnail: artwork.thumbnail ?? null,
+          width: typeof artwork.width === 'number' ? artwork.width : null,
+          height: typeof artwork.height === 'number' ? artwork.height : null,
+          language: artwork.language ?? null,
+          type: tvdbArtworkType(artwork.type),
+          source: 'tvdb' as const,
+          providerType: typeof artwork.type === 'number' ? artwork.type : null,
+          score: typeof artwork.score === 'number' ? artwork.score : null,
+          includesText: typeof artwork.includesText === 'boolean' ? artwork.includesText : null
+        } satisfies Artwork;
+      })
+      .filter((artwork: Artwork | null): artwork is Artwork => artwork !== null),
+    raw: series
   };
 }
 

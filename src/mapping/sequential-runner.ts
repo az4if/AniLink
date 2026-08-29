@@ -47,7 +47,7 @@ export async function sequentialCore<T>(
  * Processes `ids` one at a time: ask the provider for this id's data, get
  * the response, index it -- via `indexOne` -- then wait `delayMs` before
  * moving to the next id. This is the shape a single-key rate-limited API
- * (TVDB) needs; deliberately NOT the same as chunked-runner.ts, which
+ * (TVDB or TMDB) needs; deliberately NOT the same as chunked-runner.ts, which
  * batches many rows into one upsert -- there's no batching a provider that
  * only accepts one id per request.
  *

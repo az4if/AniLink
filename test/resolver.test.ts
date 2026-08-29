@@ -1,7 +1,8 @@
 import { parseAnimeListXmlFile } from '../src/mapping/xml-parser.js';
 import { resolveEpisode, reverseResolveRegular, type ResolvedEpisode } from '../src/mapping/resolver.js';
+import { fileURLToPath } from 'node:url';
 
-const rows = parseAnimeListXmlFile(new URL('./anime-list-master.sample.xml', import.meta.url).pathname);
+const rows = parseAnimeListXmlFile(fileURLToPath(new URL('./anime-list-master.sample.xml', import.meta.url)));
 const byId = new Map(rows.map((r) => [r.anidbId, r]));
 
 let pass = 0;

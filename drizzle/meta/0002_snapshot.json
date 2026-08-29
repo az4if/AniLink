@@ -1,0 +1,452 @@
+{
+  "id": "7fe4dbd2-8a9e-4c4e-96f9-a6b613129d08",
+  "prevId": "c27d8b9f-d25b-4fac-b53d-a009a5a1b268",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.ani_zip_cache": {
+      "name": "ani_zip_cache",
+      "schema": "",
+      "columns": {
+        "anidb_id": {
+          "name": "anidb_id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "raw_data": {
+          "name": "raw_data",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_imported_at": {
+          "name": "last_imported_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "api_data": {
+          "name": "api_data",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "api_scraped_at": {
+          "name": "api_scraped_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "ani_zip_cache_anidb_id_mapping_anidb_id_fk": {
+          "name": "ani_zip_cache_anidb_id_mapping_anidb_id_fk",
+          "tableFrom": "ani_zip_cache",
+          "tableTo": "mapping",
+          "columnsFrom": [
+            "anidb_id"
+          ],
+          "columnsTo": [
+            "anidb_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.anime": {
+      "name": "anime",
+      "schema": "",
+      "columns": {
+        "anidb_id": {
+          "name": "anidb_id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "anilist_id": {
+          "name": "anilist_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "mal_id": {
+          "name": "mal_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tvdb_id": {
+          "name": "tvdb_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "data": {
+          "name": "data",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "anime_anidb_id_mapping_anidb_id_fk": {
+          "name": "anime_anidb_id_mapping_anidb_id_fk",
+          "tableFrom": "anime",
+          "tableTo": "mapping",
+          "columnsFrom": [
+            "anidb_id"
+          ],
+          "columnsTo": [
+            "anidb_id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.indexer_state": {
+      "name": "indexer_state",
+      "schema": "",
+      "columns": {
+        "job_name": {
+          "name": "job_name",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "cursor": {
+          "name": "cursor",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.mapping": {
+      "name": "mapping",
+      "schema": "",
+      "columns": {
+        "anidb_id": {
+          "name": "anidb_id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "mal_id": {
+          "name": "mal_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "anilist_id": {
+          "name": "anilist_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "kitsu_id": {
+          "name": "kitsu_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "livechart_id": {
+          "name": "livechart_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "anisearch_id": {
+          "name": "anisearch_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "anime_planet_id": {
+          "name": "anime_planet_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "animenewsnetwork_id": {
+          "name": "animenewsnetwork_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "animecountdown_id": {
+          "name": "animecountdown_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "simkl_id": {
+          "name": "simkl_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notifymoe_id": {
+          "name": "notifymoe_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tvdb_id": {
+          "name": "tvdb_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tmdb_tv_id": {
+          "name": "tmdb_tv_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tmdb_movie_ids": {
+          "name": "tmdb_movie_ids",
+          "type": "integer[]",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "imdb_ids": {
+          "name": "imdb_ids",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "airing": {
+          "name": "airing",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "episode_progress": {
+          "name": "episode_progress",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "next_episode_at": {
+          "name": "next_episode_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "default_tvdb_season": {
+          "name": "default_tvdb_season",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tvdb_absolute": {
+          "name": "tvdb_absolute",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "tvdb_episode_offset": {
+          "name": "tvdb_episode_offset",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "default_tmdb_season": {
+          "name": "default_tmdb_season",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tmdb_absolute": {
+          "name": "tmdb_absolute",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "tmdb_episode_offset": {
+          "name": "tmdb_episode_offset",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "mapping_list": {
+          "name": "mapping_list",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.tmdb_cache": {
+      "name": "tmdb_cache",
+      "schema": "",
+      "columns": {
+        "cache_key": {
+          "name": "cache_key",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "tmdb_id": {
+          "name": "tmdb_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "media_type": {
+          "name": "media_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "raw_data": {
+          "name": "raw_data",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_scraped_at": {
+          "name": "last_scraped_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.tvdb_cache": {
+      "name": "tvdb_cache",
+      "schema": "",
+      "columns": {
+        "tvdb_id": {
+          "name": "tvdb_id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "raw_data": {
+          "name": "raw_data",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_scraped_at": {
+          "name": "last_scraped_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

@@ -5,8 +5,9 @@ import { db, schema } from '../db/index.js';
 import { ingestMapping } from '../mapping/ingest.js';
 import { ingestFribb } from '../mapping/fribb.js';
 import { ingestListsIds, ingestAiring } from '../mapping/lists.js';
-import { runTvdbSync } from '../mapping/tvdb-index.js';
-import { jsonQueue, tvdbQueue } from '../scheduler/index.js';
+import { ingestAniZip } from '../mapping/ani-zip.js';
+import { runProviderSync } from '../mapping/provider-index.js';
+import { jsonQueue, providerQueue } from '../scheduler/index.js';
 
 export const indexerRoutes = new Hono();
 
@@ -63,10 +64,22 @@ indexerRoutes.post('/mapping/lists-refresh', async (c) => {
   return c.json({ queued: true, queue: jsonQueue.status() });
 });
 
+// POST /indexer/mapping/ani-zip-refresh
+// Optional local source. It is a no-op when ani.zip has not been copied to
+// ANI_ZIP_PATH yet, making deployments without the archive safe.
+indexerRoutes.post('/mapping/ani-zip-refresh', async (c) => {
+  if (!requireAdmin(c.req.header('x-admin-key'))) return c.json({ error: 'unauthorized' }, 401);
+  jsonQueue.enqueue('manual:mapping-ani-zip', 10, async (ctx) => {
+    const result = await ingestAniZip(undefined, ctx);
+    console.log('[indexer] mapping-ani-zip', result);
+  });
+  return c.json({ queued: true, queue: jsonQueue.status() });
+});
+
 // GET /indexer/queue/status
 // Read-only, ungated -- reveals job names/state only, nothing sensitive.
 indexerRoutes.get('/queue/status', (c) => {
-  return c.json({ json: jsonQueue.status(), tvdb: tvdbQueue.status() });
+  return c.json({ json: jsonQueue.status(), providers: providerQueue.status() });
 });
 
 // GET /indexer/status
@@ -91,7 +104,7 @@ indexerRoutes.get('/status', async (c) => {
     }
   }
 
-  const jobNames = ['mapping-xml', 'mapping-fribb', 'mapping-lists-ids', 'tvdb-reconcile', 'tvdb-full-reconcile'];
+  const jobNames = ['mapping-ani-zip', 'mapping-xml', 'mapping-fribb', 'mapping-lists-ids', 'provider-reconcile', 'provider-full-reconcile'];
   const jobs = await Promise.all(
     jobNames.map((jobName) =>
       safe(`indexer_state:${jobName}`, async () => {
@@ -112,11 +125,13 @@ indexerRoutes.get('/status', async (c) => {
     tvdb_cache: await safe(
       'count:tvdb_cache',
       async () => (await db.select({ n: sql<number>`count(*)::int` }).from(schema.tvdbCache))[0].n
-    )
+    ),
+    tmdb_cache: await safe('count:tmdb_cache', async () => (await db.select({ n: sql<number>`count(*)::int` }).from(schema.tmdbCache))[0].n),
+    ani_zip_cache: await safe('count:ani_zip_cache', async () => (await db.select({ n: sql<number>`count(*)::int` }).from(schema.aniZipCache))[0].n)
   };
 
   return c.json({
-    queues: { json: jsonQueue.status(), tvdb: tvdbQueue.status() },
+    queues: { json: jsonQueue.status(), providers: providerQueue.status() },
     jobs,
     rowCounts,
     scheduler: { enabled: Config.scheduler.enabled }
@@ -124,35 +139,51 @@ indexerRoutes.get('/status', async (c) => {
 });
 
 // POST /indexer/mapping/sync
-// Runs all four mapping sources in sequence -- XML, Fribb, lists-main ids,
-// lists-main airing -- exactly what the scheduler does on MAPPING_SYNC_HOURS.
+// Runs local ani.zip, XML, Fribb, lists-main ids, then lists-main airing --
+// exactly what the scheduler does on MAPPING_SYNC_HOURS.
 // The three routes above still exist individually for targeted debugging.
 indexerRoutes.post('/mapping/sync', async (c) => {
   if (!requireAdmin(c.req.header('x-admin-key'))) return c.json({ error: 'unauthorized' }, 401);
   jsonQueue.enqueue('manual:mapping-sync', 10, async (ctx) => {
+    const aniZip = await ingestAniZip(undefined, ctx);
     const xml = await ingestMapping(undefined, ctx);
     const fribb = await ingestFribb(undefined, ctx);
     const ids = await ingestListsIds(undefined, ctx);
     const airing = await ingestAiring();
-    console.log('[indexer] mapping-sync', { xml, fribb, ids, airing });
+    console.log('[indexer] mapping-sync', { aniZip, xml, fribb, ids, airing });
   });
   return c.json({ queued: true, queue: jsonQueue.status() });
 });
 
-// POST /indexer/tvdb/incremental
-// Only tvdb_ids that are currently airing or have never been fetched --
-// naturally covers everything on the very first run (nothing's cached
-// yet), and only the new/airing subset after that. See tvdb-targets.ts.
-// NOTE: the actual TVDB API call is still a stub (see tvdb-index.ts) --
-// this exercises the real selection/queue/rate-limit plumbing, but won't
-// populate tvdb_cache with real data until a TVDB client is built.
+// POST /indexer/providers/incremental
+// One ordered TVDB -> TMDB fallback -> ani.zip cross-reference pass per
+// anime. The individual legacy paths below are kept as aliases so existing
+// deployments switch safely to this single pipeline.
+indexerRoutes.post('/providers/incremental', async (c) => {
+  if (!requireAdmin(c.req.header('x-admin-key'))) return c.json({ error: 'unauthorized' }, 401);
+  providerQueue.enqueue('manual:provider-incremental', 20, async (ctx) => {
+    const result = await runProviderSync('incremental', ctx);
+    console.log('[indexer] provider-incremental', result);
+  });
+  return c.json({ queued: true, queue: providerQueue.status() });
+});
+
+indexerRoutes.post('/providers/full', async (c) => {
+  if (!requireAdmin(c.req.header('x-admin-key'))) return c.json({ error: 'unauthorized' }, 401);
+  providerQueue.enqueue('manual:provider-full', 10, async (ctx) => {
+    const result = await runProviderSync('full', ctx);
+    console.log('[indexer] provider-full', result);
+  });
+  return c.json({ queued: true, queue: providerQueue.status() });
+});
+
 indexerRoutes.post('/tvdb/incremental', async (c) => {
   if (!requireAdmin(c.req.header('x-admin-key'))) return c.json({ error: 'unauthorized' }, 401);
-  tvdbQueue.enqueue('manual:tvdb-incremental', 20, async (ctx) => {
-    const result = await runTvdbSync('incremental', ctx);
-    console.log('[indexer] tvdb-incremental', result);
+  providerQueue.enqueue('manual:provider-incremental', 20, async (ctx) => {
+    const result = await runProviderSync('incremental', ctx);
+    console.log('[indexer] provider-incremental', result);
   });
-  return c.json({ queued: true, queue: tvdbQueue.status() });
+  return c.json({ queued: true, queue: providerQueue.status() });
 });
 
 // POST /indexer/tvdb/full
@@ -160,9 +191,47 @@ indexerRoutes.post('/tvdb/incremental', async (c) => {
 // rarely (TVDB_FULL_SYNC_HOURS, default 30 days).
 indexerRoutes.post('/tvdb/full', async (c) => {
   if (!requireAdmin(c.req.header('x-admin-key'))) return c.json({ error: 'unauthorized' }, 401);
-  tvdbQueue.enqueue('manual:tvdb-full', 10, async (ctx) => {
-    const result = await runTvdbSync('full', ctx);
-    console.log('[indexer] tvdb-full', result);
+  providerQueue.enqueue('manual:provider-full', 10, async (ctx) => {
+    const result = await runProviderSync('full', ctx);
+    console.log('[indexer] provider-full', result);
   });
-  return c.json({ queued: true, queue: tvdbQueue.status() });
+  return c.json({ queued: true, queue: providerQueue.status() });
+});
+
+indexerRoutes.post('/tmdb/incremental', async (c) => {
+  if (!requireAdmin(c.req.header('x-admin-key'))) return c.json({ error: 'unauthorized' }, 401);
+  providerQueue.enqueue('manual:provider-incremental', 20, async (ctx) => {
+    const result = await runProviderSync('incremental', ctx);
+    console.log('[indexer] provider-incremental', result);
+  });
+  return c.json({ queued: true, queue: providerQueue.status() });
+});
+
+indexerRoutes.post('/tmdb/full', async (c) => {
+  if (!requireAdmin(c.req.header('x-admin-key'))) return c.json({ error: 'unauthorized' }, 401);
+  providerQueue.enqueue('manual:provider-full', 10, async (ctx) => {
+    const result = await runProviderSync('full', ctx);
+    console.log('[indexer] provider-full', result);
+  });
+  return c.json({ queued: true, queue: providerQueue.status() });
+});
+
+// Free remote enrichment for localized titles, provider-ID gap fills,
+// direct episode mappings, summaries, images, and episode artwork.
+indexerRoutes.post('/ani-zip/incremental', async (c) => {
+  if (!requireAdmin(c.req.header('x-admin-key'))) return c.json({ error: 'unauthorized' }, 401);
+  providerQueue.enqueue('manual:provider-incremental', 20, async (ctx) => {
+    const result = await runProviderSync('incremental', ctx);
+    console.log('[indexer] provider-incremental', result);
+  });
+  return c.json({ queued: true, queue: providerQueue.status() });
+});
+
+indexerRoutes.post('/ani-zip/full', async (c) => {
+  if (!requireAdmin(c.req.header('x-admin-key'))) return c.json({ error: 'unauthorized' }, 401);
+  providerQueue.enqueue('manual:provider-full', 10, async (ctx) => {
+    const result = await runProviderSync('full', ctx);
+    console.log('[indexer] provider-full', result);
+  });
+  return c.json({ queued: true, queue: providerQueue.status() });
 });

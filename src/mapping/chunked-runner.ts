@@ -43,7 +43,8 @@ export async function runChunked<T>(
   chunkSize: number,
   getAnidbId: (item: T) => number,
   processChunk: (chunk: T[]) => Promise<void>,
-  ctx?: YieldCtx
+  ctx?: YieldCtx,
+  delayMs = 0
 ): Promise<ChunkedResult> {
   let i = await readCursor(jobName);
   if (i >= items.length) i = 0; // stale cursor from a previously-shorter list
@@ -63,6 +64,13 @@ export async function runChunked<T>(
       await writeCursor(jobName, i);
       console.log(`[${jobName}] yielding at ${i}/${items.length} for a higher-priority job`);
       return { processed, done: false, yielded: true, added };
+    }
+
+    // Local archive imports can opt into the same index delay used by
+    // provider loops, but only between bounded DB batches. Sleeping for
+    // every individual archive row would turn a normal import into hours.
+    if (i < items.length && delayMs > 0) {
+      await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
     }
   }
 

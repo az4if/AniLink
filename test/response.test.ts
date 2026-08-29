@@ -28,6 +28,7 @@ const cowboyBebopRow = {
   animeNewsNetworkId: 13,
   animeCountdownId: 37089,
   simklId: 37089,
+  notifyMoeId: null,
   tvdbId: 76885,
   tmdbTvId: 30991,
   tmdbMovieIds: null,
@@ -62,7 +63,8 @@ check('response shapes ids/type/title/airing correctly, nulls image/description/
     animePlanet: 'cowboy-bebop',
     animeNewsNetwork: 13,
     animeCountdown: 37089,
-    simkl: 37089
+    simkl: 37089,
+    notifyMoe: null
   },
   type: 'TV',
   title: 'Cowboy Bebop',
@@ -72,6 +74,11 @@ check('response shapes ids/type/title/airing correctly, nulls image/description/
   description: null,
   image: null,
   episodes: [],
+  titles: {},
+  episodeCount: null,
+  specialCount: null,
+  artworks: [],
+  providers: { tvdb: null, tmdb: null, aniZip: null },
   updatedAt: cowboyBebopRow.updatedAt
 });
 

@@ -1,7 +1,8 @@
 import { parseAnimeListXmlFile } from '../src/mapping/xml-parser.js';
 import { resolveEpisode } from '../src/mapping/resolver.js';
+import { fileURLToPath } from 'node:url';
 
-const rows = parseAnimeListXmlFile(new URL('./anime-list-master.sample.xml', import.meta.url).pathname);
+const rows = parseAnimeListXmlFile(fileURLToPath(new URL('./anime-list-master.sample.xml', import.meta.url)));
 console.log(`parsed ${rows.length} rows`);
 
 let noTvdb = 0, absolute = 0, hasMappingList = 0, crashes = 0;

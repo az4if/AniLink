@@ -30,17 +30,23 @@ export function buildMappingResponse(row: MappingDbRow) {
       animePlanet: row.animePlanetId,
       animeNewsNetwork: row.animeNewsNetworkId,
       animeCountdown: row.animeCountdownId,
-      simkl: row.simklId
+      simkl: row.simklId,
+      notifyMoe: row.notifyMoeId
     },
     type: row.type,
     title: row.title,
     airing: row.airing,
     episodeProgress: row.episodeProgress,
     nextEpisodeAt: row.nextEpisodeAt,
-    // pending the TVDB fetcher + merge engine -- see docstring above
+    // pending a provider fetch + merge engine -- see docstring above
     description: null as string | null,
     image: null as string | null,
     episodes: [] as unknown[],
+    titles: {} as Record<string, string>,
+    episodeCount: null as number | null,
+    specialCount: null as number | null,
+    artworks: [] as unknown[],
+    providers: { tvdb: null, tmdb: null, aniZip: null },
     updatedAt: row.updatedAt
   };
 }

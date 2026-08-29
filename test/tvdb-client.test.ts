@@ -41,7 +41,13 @@ global.fetch = (async (url: string, init?: RequestInit) => {
 
   if (url.includes('/extended')) {
     return new Response(
-      JSON.stringify({ data: { status: { name: 'Ended' }, image: 'https://example.com/poster.jpg', overview: 'A test overview.' } }),
+      JSON.stringify({
+        data: {
+          status: { name: 'Ended' }, image: 'https://example.com/poster.jpg', overview: 'A test overview.',
+          aliases: [{ name: 'Bebop', language: 'eng' }], remoteIds: [{ id: 'tt0213338', sourceName: 'IMDB' }],
+          artworks: [{ image: 'https://example.com/art.jpg', thumbnail: 'https://example.com/art-thumb.jpg', width: 1000, height: 1500, language: 'eng', type: 2, score: 10, includesText: true }]
+        }
+      }),
       { status: 200 }
     );
   }
@@ -96,6 +102,11 @@ async function run() {
     image: 'https://example.com/poster.jpg',
     overview: 'A test overview.'
   });
+  check('keeps extended fields losslessly and normalizes TVDB artwork', {
+    alias: (series.raw?.aliases as any[])?.[0]?.name,
+    remoteId: (series.raw?.remoteIds as any[])?.[0]?.id,
+    artwork: series.artworks?.[0] && [series.artworks[0].source, series.artworks[0].type, series.artworks[0].includesText]
+  }, { alias: 'Bebop', remoteId: 'tt0213338', artwork: ['tvdb', 'poster', true] });
   check('exactly one /login call for this whole fetch', loginCount, 1);
   check(
     'skips the translation fetch entirely for the episode with no "eng" in either translations array (only 1001 and 1003 fetched, never 1002)',

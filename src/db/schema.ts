@@ -17,6 +17,7 @@ export const mapping = pgTable('mapping', {
   animeNewsNetworkId: integer('animenewsnetwork_id'),
   animeCountdownId: integer('animecountdown_id'),
   simklId: integer('simkl_id'),
+  notifyMoeId: integer('notifymoe_id'),
 
   tvdbId: integer('tvdb_id'),
   tmdbTvId: integer('tmdb_tv_id'),
@@ -82,6 +83,31 @@ export const tvdbCache = pgTable('tvdb_cache', {
   rawData: jsonb('raw_data'),
   status: text('status'), // Continuing | Ended
   lastScrapedAt: timestamp('last_scraped_at', { withTimezone: true })
+});
+
+/** TMDB TV and movie payloads. cacheKey is `${mediaType}:${tmdbId}`. */
+export const tmdbCache = pgTable('tmdb_cache', {
+  cacheKey: text('cache_key').primaryKey(),
+  tmdbId: integer('tmdb_id').notNull(),
+  mediaType: text('media_type').notNull(), // tv | movie
+  rawData: jsonb('raw_data'),
+  status: text('status'),
+  lastScrapedAt: timestamp('last_scraped_at', { withTimezone: true })
+});
+
+/**
+ * Optional local ani.zip source.  Keeping its complete record makes the
+ * importer lossless: new fields in the archive are not discarded while the
+ * mapping indexer continues to use the normalized IDs above.
+ */
+export const aniZipCache = pgTable('ani_zip_cache', {
+  anidbId: integer('anidb_id').primaryKey().references(() => mapping.anidbId),
+  rawData: jsonb('raw_data').notNull(),
+  lastImportedAt: timestamp('last_imported_at', { withTimezone: true }).notNull().defaultNow(),
+  // Remote API data is kept separate from a user-provided local archive so
+  // each source remains lossless and independently refreshable.
+  apiData: jsonb('api_data'),
+  apiScrapedAt: timestamp('api_scraped_at', { withTimezone: true })
 });
 
 /** Final merged record -- this is what /mappings serves. Shape of `data` matches the README example. */

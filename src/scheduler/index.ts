@@ -3,7 +3,8 @@ import { JobQueue } from './queue.js';
 import { ingestMapping } from '../mapping/ingest.js';
 import { ingestFribb } from '../mapping/fribb.js';
 import { ingestListsIds, ingestAiring } from '../mapping/lists.js';
-import { runTvdbSync } from '../mapping/tvdb-index.js';
+import { ingestAniZip } from '../mapping/ani-zip.js';
+import { runProviderSync } from '../mapping/provider-index.js';
 import type { YieldCtx } from '../mapping/chunked-runner.js';
 
 /**
@@ -20,10 +21,10 @@ export const jsonQueue = new JobQueue('json-sources');
  * it, so a scheduled priority job genuinely needs to be able to make a
  * long-running reconcile sweep step aside.
  */
-export const tvdbQueue = new JobQueue('tvdb');
+export const providerQueue = new JobQueue('provider-pipeline');
 
 // Higher number = more urgent.
-const PRIORITY = { mapping: 10, tvdbIncremental: 20, tvdbFull: 10 } as const;
+const PRIORITY = { mapping: 10, providerIncremental: 20, providerFull: 10 } as const;
 
 // setInterval's delay is a 32-bit signed int -- anything over ~24.8 days
 // (2,147,483,647ms) silently overflows and Node clamps it to firing every
@@ -61,21 +62,22 @@ export function startScheduler(): void {
   // remaining gaps) -> lists-main airing (currently-airing snapshot), every
   // run, in that order, all on one cadence.
   every(jsonQueue, Config.scheduler.mappingSyncHours, 'scheduled:mapping-sync', PRIORITY.mapping, async (ctx) => {
+    const aniZip = await ingestAniZip(undefined, ctx);
     const xml = await ingestMapping(undefined, ctx);
     const fribb = await ingestFribb(undefined, ctx);
     const ids = await ingestListsIds(undefined, ctx);
     const airing = await ingestAiring();
-    console.log('[scheduler] mapping-sync', { xml, fribb, ids, airing });
+    console.log('[scheduler] mapping-sync', { aniZip, xml, fribb, ids, airing });
   });
 
-  every(tvdbQueue, Config.scheduler.tvdbSyncHours, 'scheduled:tvdb-incremental', PRIORITY.tvdbIncremental, async (ctx) => {
-    const result = await runTvdbSync('incremental', ctx);
-    console.log('[scheduler] tvdb-incremental', result);
+  every(providerQueue, Config.scheduler.providerSyncHours, 'scheduled:provider-incremental', PRIORITY.providerIncremental, async (ctx) => {
+    const result = await runProviderSync('incremental', ctx);
+    console.log('[scheduler] provider-incremental', result);
   });
 
-  every(tvdbQueue, Config.scheduler.tvdbFullSyncHours, 'scheduled:tvdb-full', PRIORITY.tvdbFull, async (ctx) => {
-    const result = await runTvdbSync('full', ctx);
-    console.log('[scheduler] tvdb-full', result);
+  every(providerQueue, Config.scheduler.providerFullSyncHours, 'scheduled:provider-full', PRIORITY.providerFull, async (ctx) => {
+    const result = await runProviderSync('full', ctx);
+    console.log('[scheduler] provider-full', result);
   });
 
   console.log('[scheduler] enabled', Config.scheduler);

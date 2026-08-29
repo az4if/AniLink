@@ -1,8 +1,9 @@
 import { parseAnimeListXmlFile } from '../src/mapping/xml-parser.js';
 import { buildEpisodes } from '../src/mapping/merge.js';
 import type { TvdbEpisode } from '../src/mapping/tvdb-client.js';
+import { fileURLToPath } from 'node:url';
 
-const rows = parseAnimeListXmlFile(new URL('./anime-list-master.sample.xml', import.meta.url).pathname);
+const rows = parseAnimeListXmlFile(fileURLToPath(new URL('./anime-list-master.sample.xml', import.meta.url)));
 const byId = new Map(rows.map((r) => [r.anidbId, r]));
 
 let pass = 0;

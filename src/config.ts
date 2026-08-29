@@ -25,16 +25,30 @@ export const Config = {
     baseUrl: process.env.TVDB_API_URL ?? 'https://api4.thetvdb.com/v4'
   },
 
+  tmdb: {
+    // TMDB v4 Read Access Token. This is deliberately separate from TVDB;
+    // an empty value simply skips TMDB enrichment rather than failing a run.
+    apiKey: process.env.TMDB_API_KEY ?? '',
+    baseUrl: process.env.TMDB_API_URL ?? 'https://api.themoviedb.org/3',
+    imageBaseUrl: process.env.TMDB_IMAGE_URL ?? 'https://image.tmdb.org/t/p'
+  },
+
+  aniZip: {
+    apiUrl: process.env.ANI_ZIP_API_URL ?? 'https://api.ani.zip'
+  },
+
   // Delay after each single "ask this provider for one anime's episode
   // data, get the response, index it" step, before moving to the next id.
-  // Named generically (not TVDB_INDEX_DELAY) since any future per-id
-  // provider loop uses the same sequential-runner.ts and the same knob --
-  // right now that's just TVDB. See sequential-runner.ts.
+  // Shared by the TVDB and TMDB per-id provider loops. See
+  // sequential-runner.ts.
   indexDelayMs: Number(process.env.INDEX_DELAY ?? 5) * 1000,
 
   // All static-file mapping sources. Every one is overridable via env so a
   // fork/mirror URL can be swapped in without touching code.
   sources: {
+    // A local, optional archive. Its importer understands common JSON
+    // layouts and preserves every original entry in ani_zip_cache.
+    aniZipPath: process.env.ANI_ZIP_PATH ?? `${process.cwd()}/ani.zip`,
     animeListMasterXmlUrl:
       process.env.ANIME_LIST_MASTER_XML_URL ??
       'https://raw.githubusercontent.com/Anime-Lists/anime-lists/refs/heads/master/anime-list-master.xml',
@@ -91,6 +105,14 @@ export const Config = {
     // on the very first run, since nothing's cached yet -- see tvdb-targets.ts)
     tvdbSyncHours: Number(process.env.TVDB_SYNC_HOURS ?? 6),
     // TVDB, full resync of every mapped tvdb_id regardless of cache state
-    tvdbFullSyncHours: Number(process.env.TVDB_FULL_SYNC_HOURS ?? 24 * 30)
+    tvdbFullSyncHours: Number(process.env.TVDB_FULL_SYNC_HOURS ?? 24 * 30),
+    tmdbSyncHours: Number(process.env.TMDB_SYNC_HOURS ?? 6),
+    tmdbFullSyncHours: Number(process.env.TMDB_FULL_SYNC_HOURS ?? 24 * 30),
+    aniZipSyncHours: Number(process.env.ANI_ZIP_SYNC_HOURS ?? 12),
+    aniZipFullSyncHours: Number(process.env.ANI_ZIP_FULL_SYNC_HOURS ?? 24 * 30),
+    // Unified pipeline timing. The legacy provider-specific settings remain
+    // accepted in env files, but all providers now run together here.
+    providerSyncHours: Number(process.env.PROVIDER_SYNC_HOURS ?? 6),
+    providerFullSyncHours: Number(process.env.PROVIDER_FULL_SYNC_HOURS ?? 24 * 30)
   }
 };

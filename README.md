@@ -37,17 +37,24 @@ For how this works internally, why it's built this way, and testing, see
    default (open). Set `ADMIN_KEY` in `.env` and pass it as `x-admin-key`
    on every `POST /indexer/*` call **before deploying publicly** -- left
    unset, anyone can trigger these jobs.
-5. **Fetch TVDB episode data (optional but recommended):** set
+5. **Fetch provider metadata, episodes, and artwork:** set
    `TVDB_API_KEY` in `.env` (register one at
    [thetvdb.com/api-information](https://thetvdb.com/api-information)),
    then:
    ```bash
    curl -X POST http://localhost:3000/indexer/tvdb/incremental
    ```
-   Without a key set, `/mappings` still works -- `description`, `image`,
+   Set `TMDB_API_KEY` as well, then run:
+   ```bash
+   curl -X POST http://localhost:3000/indexer/tmdb/incremental
+   ```
+   AniLink saves TVDB and TMDB artwork together. TVDB remains preferred for
+   episode data; TMDB becomes the fallback for mapped shows with no TVDB ID.
+   Without either key set, `/mappings` still works -- `description`, `image`,
    and `episodes` just stay empty rather than faked. This is slow the
-   first time (`INDEX_DELAY` seconds per distinct `tvdb_id`, ~9,400 of
-   them) -- run it in the background and move on.
+   first time (`INDEX_DELAY` seconds per distinct provider target, roughly
+   9,400 TVDB IDs plus mapped TMDB IDs) -- run it in the background and move
+   on.
 6. **Confirm it worked:**
    ```bash
    curl http://localhost:3000/indexer/status
@@ -93,9 +100,15 @@ For how this works internally, why it's built this way, and testing, see
 | `MAPPING_SYNC_HOURS` | `3` | XML/Fribb/ids/airing refresh cadence. |
 | `TVDB_SYNC_HOURS` | `6` | TVDB new+airing pass cadence. |
 | `TVDB_FULL_SYNC_HOURS` | `720` | TVDB full-catalog pass cadence. |
-| `INDEX_DELAY` | `5` | Seconds between individual TVDB requests. |
+| `INDEX_DELAY` | `5` | Seconds between TVDB/TMDB indexing targets and ani.zip write batches. |
 | `TVDB_API_KEY` / `TVDB_API_PIN` | *(empty)* | thetvdb.com/api-information. Most keys don't need a PIN -- leave blank and only add one if login rejects the key. |
 | `TVDB_API_URL` | `https://api4.thetvdb.com/v4` | Base URL for the TVDB v4 API. Not the same thing as `TVDB_API_KEY` -- only override this if you're pointing at something other than the real API. |
+| `TMDB_API_KEY` | *(empty)* | TMDB v4 Read Access Token. Enables TMDB TV/movie metadata, episode fallback, and artwork indexing. |
+| `TMDB_API_URL` / `TMDB_IMAGE_URL` | TMDB production URLs | Override only for a proxy/mock. |
+| `ANI_ZIP_PATH` | `./ani.zip` | Optional local JSON-in-ZIP cross-reference source; full source records are retained. |
+| `ANI_ZIP_API_URL` | `https://api.ani.zip` | Remote metadata enrichment source; no key required. |
+| `TMDB_SYNC_HOURS` / `TMDB_FULL_SYNC_HOURS` | `6` / `720` | TMDB incremental/full indexing cadence. |
+| `ANI_ZIP_SYNC_HOURS` / `ANI_ZIP_FULL_SYNC_HOURS` | `12` / `720` | Remote ani.zip incremental/full enrichment cadence. |
 | `ANIME_LIST_MASTER_XML_URL` | Anime-Lists/anime-lists | Override to point at a fork/mirror. |
 | `FRIBB_JSON_URL` | Fribb/anime-lists | Same. |
 | `ANIME_JSON_URL` | anime-and-manga/lists | Same. |
@@ -113,8 +126,13 @@ For how this works internally, why it's built this way, and testing, see
 | POST | `/indexer/mapping/refresh` | XML only |
 | POST | `/indexer/mapping/fribb-refresh` | Fribb only |
 | POST | `/indexer/mapping/lists-refresh` | lists-main ids + airing |
+| POST | `/indexer/mapping/ani-zip-refresh` | optional local ani.zip import |
 | POST | `/indexer/tvdb/incremental` | new + airing tvdb_ids |
 | POST | `/indexer/tvdb/full` | every mapped tvdb_id |
+| POST | `/indexer/tmdb/incremental` | new + airing TMDB TV/movie IDs |
+| POST | `/indexer/tmdb/full` | every mapped TMDB TV/movie ID |
+| POST | `/indexer/ani-zip/incremental` | new + airing remote ani.zip records |
+| POST | `/indexer/ani-zip/full` | every AniDB record with an AniList, MAL, or Kitsu ID |
 
 `POST` routes require an `x-admin-key` header matching `ADMIN_KEY` -- unless
 `ADMIN_KEY` is unset/empty, in which case they're open to anyone.
@@ -147,13 +165,19 @@ finishes for a given title, `description`/`image`/`episodes` are `null`/
   "ids": { "anidb": 23, "mal": 1, "anilist": 1, "tvdb": 76885, /* ...and more */ },
   "type": "TV",
   "title": "Cowboy Bebop",
+  "titles": { "en": "Cowboy Bebop", "ja": "カウボーイビバップ" },
   "airing": false,
   "episodeProgress": null,
   "nextEpisodeAt": null,
   "description": "In the year 2071, a ragtag crew of bounty hunters...",
   "image": "https://artworks.thetvdb.com/banners/posters/76885-1.jpg",
+  "artworks": [
+    { "source": "tvdb", "type": "poster", "url": "...", "language": "eng" },
+    { "source": "tmdb", "type": "background", "url": "...", "language": null },
+    { "source": "ani-zip", "type": "logo", "url": "...", "language": null }
+  ],
   "episodes": [
-    { "number": 1, "season": 1, "episode": 1, "absoluteNumber": 1, "title": "Asteroid Blues", "titleEn": "Asteroid Blues", "overview": "...", "overviewEn": "...", "aired": "1998-04-03", "image": null }
+    { "number": 1, "season": 1, "episode": 1, "absoluteNumber": 1, "title": "Asteroid Blues", "titleEn": "Asteroid Blues", "titles": { "en": "Asteroid Blues", "ja": "アステロイド・ブルース" }, "anidbEpisodeId": 881, "overview": "...", "overviewEn": "...", "aired": "1998-04-03", "image": null }
     /* ...and so on */
   ]
 }
@@ -168,7 +192,13 @@ that episode at all -- not an error. Specials aren't included -- see
 CONTRIBUTING.md for why.
 
 `ids.tvdb: null` means TVDB coverage doesn't exist for that anime (~56% of
-the catalog) -- not an error.
+the catalog) -- not an error. If its mapping has a TMDB ID, the TMDB pass
+supplies the response description/image/episodes instead. Full unmodified
+TVDB extended records and TMDB API records stay in `tvdb_cache` and
+`tmdb_cache`. The ani.zip API response stays separately cached in
+`ani_zip_cache`, preserving all language titles and fields such as direct
+AniDB/TVDB episode IDs. `artworks` is the normalized, provenance-preserving
+view.
 
 ## Troubleshooting
 

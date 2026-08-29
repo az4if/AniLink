@@ -23,6 +23,7 @@ export type AniZipEpisode = {
 };
 
 export type AniZipData = {
+  sourceUrl: string;
   anidbId: number | null;
   titles: Record<string, string>;
   mappings: {
@@ -68,13 +69,14 @@ function artworkType(coverType: unknown): Artwork['type'] {
 }
 
 /** Converts an API response without collapsing language, provider-ID or episode fields. */
-export function normalizeAniZipApiData(raw: unknown): AniZipData {
+export function normalizeAniZipApiData(raw: unknown, sourceUrl = Config.aniZip.apiUrl): AniZipData {
   const data = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, any>) : {};
   const mappings = data.mappings && typeof data.mappings === 'object' ? data.mappings : {};
   const episodes = data.episodes && typeof data.episodes === 'object' ? data.episodes : {};
   const images = Array.isArray(data.images) ? data.images : [];
 
   return {
+    sourceUrl,
     anidbId: numberOrNull(mappings.anidb_id),
     titles: titles(data.titles),
     mappings: {
@@ -144,5 +146,5 @@ export async function fetchAniZip(target: AniZipTarget): Promise<AniZipData> {
   url.searchParams.set(target.lookup, String(target.value));
   const res = await fetchWithHeaders(url.toString());
   if (!res.ok) throw new Error(`ani.zip GET ${url.pathname}?${url.searchParams} failed: HTTP ${res.status} ${await res.text()}`);
-  return normalizeAniZipApiData(await res.json());
+  return normalizeAniZipApiData(await res.json(), url.toString());
 }

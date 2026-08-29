@@ -33,12 +33,12 @@ const data = normalizeAniZipApiData({
       runtime: 25, overview: 'Episode overview', image: 'https://example.com/episode.jpg', anidbEid: 440, rating: '6.03', summary: 'Episode summary'
     }
   }
-});
+}, 'https://api.ani.zip/mappings?anilist_id=21');
 
 check('preserves language titles and every useful provider ID', {
-  anidbId: data.anidbId, titles: data.titles, mappings: data.mappings
+  sourceUrl: data.sourceUrl, anidbId: data.anidbId, titles: data.titles, mappings: data.mappings
 }, {
-  anidbId: 69, titles: { en: 'One Piece', ja: 'ONE PIECE', 'x-jat': 'Wan Pisu' },
+  sourceUrl: 'https://api.ani.zip/mappings?anilist_id=21', anidbId: 69, titles: { en: 'One Piece', ja: 'ONE PIECE', 'x-jat': 'Wan Pisu' },
   mappings: { anilistId: 21, malId: 21, kitsuId: 12, animePlanetId: 'one-piece', anisearchId: 2227, livechartId: 321, tvdbId: 81797, tmdbId: 37854, imdbId: 'tt0388629', notifyMoeId: 69, type: 'TV' }
 });
 check('normalizes direct episode mapping and multilingual metadata', data.episodes[0], {

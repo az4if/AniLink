@@ -128,6 +128,10 @@ For how this works internally, why it's built this way, and testing, see
 | POST | `/indexer/providers/incremental` | unified new + airing provider pass |
 | POST | `/indexer/providers/full` | unified whole-catalog provider pass |
 
+The final stage of every provider pass calls
+[`api.ani.zip/mappings`](https://api.ani.zip/mappings?anilist_id=21). The
+stored response retains the exact lookup URL under `providers.aniZip.url`.
+
 `POST` routes require an `x-admin-key` header matching `ADMIN_KEY` -- unless
 `ADMIN_KEY` is unset/empty, in which case they're open to anyone.
 

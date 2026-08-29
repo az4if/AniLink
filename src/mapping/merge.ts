@@ -214,7 +214,7 @@ export async function remergeAnime(anidbId: number, freshTvdb?: TvdbSeriesData):
     providers: {
       tvdb: tvdb ? { id: row.tvdbId, status: tvdb.status, cached: true } : null,
       tmdb: tmdb ? { id: tmdb.id, mediaType: tmdb.mediaType, status: tmdb.status, cached: true } : null,
-      aniZip: aniZip ? { cached: true, episodeCount: aniZip.episodeCount, specialCount: aniZip.specialCount } : null
+      aniZip: aniZip ? { cached: true, url: aniZip.sourceUrl, episodeCount: aniZip.episodeCount, specialCount: aniZip.specialCount } : null
     }
   };
 

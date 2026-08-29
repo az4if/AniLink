@@ -216,7 +216,7 @@
 
   <section id="shape">
     <h2>Response shape</h2>
-    <p class="sub">Every field on the left is real. <code>description</code>, <code>image</code>, and <code>episodes</code> come back honestly empty until the TVDB fetcher and merge engine ship — see status below.</p>
+    <p class="sub">Every field on the left is real. <code>description</code>, <code>image</code>, and <code>episodes</code> populate once TVDB data has been fetched for that title — see status below.</p>
     <div class="shape-cols">
       <pre>{
   "ids": {
@@ -236,16 +236,18 @@
   "airing": false,
   "episodeProgress": null,
   "nextEpisodeAt": null,
-  "description": null,
-  "image": null,
-  "episodes": [],
+  "description": "In the year 2071, a ragtag crew of bounty hunters chases down criminals across the solar system...",
+  "image": "https://artworks.thetvdb.com/banners/posters/76885-1.jpg",
+  "episodes": [
+    { "number": 1, "season": 1, "episode": 1, "title": "Asteroid Blues", "aired": "1998-04-03" }
+  ],
   "updatedAt": "2026-08-23T00:00:00Z"
 }</pre>
       <div>
         <div class="field"><code>ids</code><span>Every provider id AniLink has cross-referenced for this title.</span></div>
         <div class="field"><code>type</code><span>TV / MOVIE / OVA / ONA / SPECIAL / HENTAI / UNKNOWN.</span></div>
         <div class="field"><code>airing / episodeProgress / nextEpisodeAt</code><span>Live, from a scheduled sync of the airing feed — only set for currently-airing titles.</span></div>
-        <div class="field"><code>description / image / episodes</code><span>Not populated yet — pending the TVDB integration.</span></div>
+        <div class="field"><code>description / image / episodes</code><span>Populated once TVDB data has been fetched for this title; honestly empty otherwise, never faked.</span></div>
       </div>
     </div>
   </section>
@@ -256,9 +258,10 @@
     <ul class="status-list">
       <li><span class="mark done">done</span> Full AniDB catalog mapping (anidb/mal/anilist/kitsu/tvdb/tmdb/imdb + 6 more provider ids)</li>
       <li><span class="mark done">done</span> Season-offset &amp; per-episode mapping resolution, forward and reverse</li>
-      <li><span class="mark done">done</span> All four mapping sources sync together on one schedule; rate-limited job queue ready for TVDB</li>
-      <li><span class="mark pending">pending</span> TVDB episode data — titles, images, descriptions, full episode lists</li>
+      <li><span class="mark done">done</span> All four mapping sources sync together on one schedule; rate-limited job queue</li>
+      <li><span class="mark done">done</span> TVDB v4 client (login/token, series info, full episode list) merged into every response</li>
       <li><span class="mark pending">pending</span> Episode data for the ~56% of the catalog with no TVDB mapping</li>
+      <li><span class="mark pending">pending</span> Specials / OVA / OP / ED / trailer episode numbering</li>
     </ul>
   </section>
 </div>

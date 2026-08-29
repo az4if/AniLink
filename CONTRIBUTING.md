@@ -28,8 +28,8 @@ AniDB's website sits behind Cloudflare, which blocks datacenter/cloud IPs
 by default, and AniDB's own policy is that its client API isn't meant to be
 hit from a VPS anyway -- only a residential connection. Rather than fight
 that, AniLink never calls AniDB directly. IDs come entirely from the
-sources above; TVDB (once its fetcher exists) is canonical for actual
-episode data, not just enrichment.
+sources above; TVDB is canonical for actual episode data, not just
+enrichment.
 
 Trade-off: specials/OVA/OP/ED/trailer episodes aren't mappable this way,
 since those only exist as distinct entries because of AniDB's own
@@ -106,19 +106,30 @@ run of that job resumes from there instead of starting over.
 scheduler (tested, including a regression test for a real `setInterval`
 32-bit overflow bug found during development -- a 30-day interval
 overflows the 32-bit ms limit and silently fires every 1ms instead of
-monthly); the resumable/rate-limited per-id runner TVDB will use;
+monthly); the resumable/rate-limited per-id runner TVDB uses;
 `/mappings`, `/health`, and the full `/indexer/*` diagnostic and control
 surface.
 
-**Pending:** the actual TVDB API client. `src/mapping/tvdb-index.ts` has a
-clearly-marked stub where it goes. The selection logic (which ids need
-fetching), rate limiting, and resumable queue-integrated loop around it
-are all real and tested -- only the HTTP call to TVDB itself isn't written.
-Once it exists, `description`/`image`/`episodes` in the `/mappings`
-response populate automatically; no other code needs to change.
+The TVDB v4 client (`src/mapping/tvdb-client.ts`) is also built: exchanges
+`TVDB_API_KEY` for a Bearer token via `POST /login` (cached in-memory,
+refreshed on expiry or a 401), then `GET /series/{id}/extended` for
+status/image/overview and paginated `GET /series/{id}/episodes/official`
+for the full episode list. Plus the merge engine
+(`src/mapping/merge.ts`) that turns a fetched TVDB series + episode list
+into the public `/mappings` response shape via `reverseResolveRegular()`
+-- including the tvdb_id-shared-by-multiple-anidb-entries case (Ghost in
+the Shell), where each entry gets its own episode numbers off its own
+offset against the same shared TVDB data. `description`/`image`/
+`episodes` populate automatically once `POST /indexer/tvdb/*` has run for
+a title; `mappings.routes.ts` was already written to prefer `anime.data`
+over the plain `mapping` fallback the moment it exists, so no route code
+needed to change.
 
 **Also open:** episode data for the ~56% of the catalog with no TVDB
 mapping at all. Nothing sources episode lists for those right now.
+Specials/OVA/OP/ED/trailer episodes also aren't mappable even for titles
+with TVDB coverage -- see "Why no live AniDB API access" above; not
+supported for v1.
 
 ## Testing
 
@@ -126,6 +137,8 @@ mapping at all. Nothing sources episode lists for those right now.
 npm test                                # resolver: 19 assertions against real XML data
 npx tsx test/sources.test.ts            # Fribb + lists-main parsers against real JSON
 npx tsx test/response.test.ts           # /mappings response shape
+npx tsx test/merge.test.ts              # TVDB episode -> AniDB number reversal, incl. absolute numbering
+npx tsx test/tvdb-client.test.ts        # login/token caching, pagination, 401-retry (mocked fetch, no real TVDB call)
 npx tsx test/queue.test.ts              # JobQueue: FIFO, priority preemption, dedup
 npx tsx test/scheduler.test.ts          # regression test for the setInterval overflow bug
 npx tsx test/sequential-runner.test.ts  # per-id ask/get/index/wait loop timing + resume + yield
@@ -137,3 +150,8 @@ npx tsx test/fribb-gapfill.test.ts      # Fribb gap-fill never overwrites XML da
 `anime-list-master.xml` entries through the resolver just to check nothing
 throws: 0 crashes, 9,400 anime with no TVDB association, 74 using absolute
 numbering, 1,428 with per-episode overrides.
+
+`test/merge-integration.manual.ts` (needs `DATABASE_URL`) exercises
+`mergeTvdbIntoAnime()` against a real database, including the shared-
+tvdb_id/different-offset case.
+

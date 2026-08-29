@@ -30,9 +30,10 @@ mappingsRoutes.get('/', async (c) => {
   const value = Number(c.req.query(param));
   if (!Number.isFinite(value)) return c.json({ error: `${param} must be a number` }, 400);
 
-  // Prefer the merged store once it exists (richer: description/image/full
-  // episode list). Right now this never hits -- the merge engine isn't
-  // built yet -- but the route doesn't need to change again once it is.
+  // Prefer the merged store when it exists (richer: description/image/full
+  // episode list) -- populated by mergeTvdbIntoAnime() once TVDB data has
+  // been fetched for this title (see CONTRIBUTING.md). Falls through to
+  // the plain mapping row for anything not merged yet.
   const merged = await db.query.anime.findFirst({ where: eq(MERGED_LOOKUPS[param], value) });
   if (merged?.data) return c.json(merged.data);
 

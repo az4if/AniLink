@@ -37,13 +37,25 @@ For how this works internally, why it's built this way, and testing, see
    default (open). Set `ADMIN_KEY` in `.env` and pass it as `x-admin-key`
    on every `POST /indexer/*` call **before deploying publicly** -- left
    unset, anyone can trigger these jobs.
-5. **Confirm it worked:**
+5. **Fetch TVDB episode data (optional but recommended):** set
+   `TVDB_API_KEY` in `.env` (register one at
+   [thetvdb.com/api-information](https://thetvdb.com/api-information)),
+   then:
+   ```bash
+   curl -X POST http://localhost:3000/indexer/tvdb/incremental
+   ```
+   Without a key set, `/mappings` still works -- `description`, `image`,
+   and `episodes` just stay empty rather than faked. This is slow the
+   first time (`INDEX_DELAY` seconds per distinct `tvdb_id`, ~9,400 of
+   them) -- run it in the background and move on.
+6. **Confirm it worked:**
    ```bash
    curl http://localhost:3000/indexer/status
    ```
    `rowCounts.mapping` should read ~16,000-17,000 once the sync finishes.
-   0 or an error -> see [Troubleshooting](#troubleshooting).
-6. **Deploy** wherever you like, with the same env vars. On Render,
+   `rowCounts.tvdb_cache` grows as step 5 runs. 0 or an error -> see
+   [Troubleshooting](#troubleshooting).
+7. **Deploy** wherever you like, with the same env vars. On Render,
    create a **Web Service** from this repo and set:
    - **Build Command** -- runs once when building:
      ```
@@ -62,7 +74,7 @@ For how this works internally, why it's built this way, and testing, see
 
    Host sleeps when idle (Render free tier)? Also set
    `RENDER_KEEP_ALIVE=true` and `PUBLIC_URL`.
-7. **Turn on scheduling:** set `ENABLE_SCHEDULER=true`. Nothing runs
+8. **Turn on scheduling:** set `ENABLE_SCHEDULER=true`. Nothing runs
    automatically until this is set.
 
 ## Environment variables
@@ -83,6 +95,7 @@ For how this works internally, why it's built this way, and testing, see
 | `TVDB_FULL_SYNC_HOURS` | `720` | TVDB full-catalog pass cadence. |
 | `INDEX_DELAY` | `5` | Seconds between individual TVDB requests. |
 | `TVDB_API_KEY` / `TVDB_API_PIN` | *(empty)* | thetvdb.com/api-information. Most keys don't need a PIN -- leave blank and only add one if login rejects the key. |
+| `TVDB_API_URL` | `https://api4.thetvdb.com/v4` | Base URL for the TVDB v4 API. Not the same thing as `TVDB_API_KEY` -- only override this if you're pointing at something other than the real API. |
 | `ANIME_LIST_MASTER_XML_URL` | Anime-Lists/anime-lists | Override to point at a fork/mirror. |
 | `FRIBB_JSON_URL` | Fribb/anime-lists | Same. |
 | `ANIME_JSON_URL` | anime-and-manga/lists | Same. |
@@ -123,7 +136,11 @@ curl -X POST http://localhost:3000/indexer/mapping/sync \
   -H "x-admin-key: your-admin-key-here"
 ```
 
-`GET /mappings` response:
+`GET /mappings` response, once TVDB data has been fetched for this title
+(see [Environment variables](#environment-variables) for `TVDB_API_KEY` --
+without a key set, or before the first `POST /indexer/tvdb/*` sync
+finishes for a given title, `description`/`image`/`episodes` are `null`/
+`[]` rather than faked):
 
 ```jsonc
 {
@@ -133,11 +150,18 @@ curl -X POST http://localhost:3000/indexer/mapping/sync \
   "airing": false,
   "episodeProgress": null,
   "nextEpisodeAt": null,
-  "description": null,  // pending -- see CONTRIBUTING.md
-  "image": null,
-  "episodes": []
+  "description": "In the year 2071, a ragtag crew of bounty hunters...",
+  "image": "https://artworks.thetvdb.com/banners/posters/76885-1.jpg",
+  "episodes": [
+    { "number": 1, "season": 1, "episode": 1, "absoluteNumber": 1, "title": "Asteroid Blues", "overview": "...", "aired": "1998-04-03", "image": null }
+    /* ...and so on */
+  ]
 }
 ```
+
+`episodes[].number` is the canonical AniDB regular-episode number
+(`season`/`episode` are TVDB's own). Specials aren't included -- see
+CONTRIBUTING.md for why.
 
 `ids.tvdb: null` means TVDB coverage doesn't exist for that anime (~56% of
 the catalog) -- not an error.

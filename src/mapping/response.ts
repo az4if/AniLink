@@ -5,16 +5,15 @@ type MappingDbRow = InferSelectModel<typeof schema.mapping>;
 
 /**
  * Builds the public /mappings response shape directly from a `mapping` row.
- * This is the "we haven't merged TVDB data in yet" shape -- ids, type,
- * title, and airing status are all real. `description`, `image`, and
- * `episodes` are honestly empty rather than faked: those need the TVDB
- * fetcher + merge engine (not built yet, see README), and returning
- * plausible-looking placeholder text would be worse than a clear null.
+ * This is the "no merged TVDB data yet" shape -- ids, type, title, and
+ * airing status are all real, but `description`, `image`, and `episodes`
+ * are honestly empty rather than faked, since they need a TVDB fetch that
+ * hasn't happened for this title (either `TVDB_API_KEY` isn't set, or
+ * `POST /indexer/tvdb/*` hasn't run for it yet -- see merge.ts).
  *
- * Once the merge engine exists and populates `anime.data` for a title, the
- * route should prefer that richer object over this one -- this function
- * stays as the fallback for anything not merged yet (which, right now, is
- * everything).
+ * `mappings.routes.ts` prefers the richer `anime.data` (populated by
+ * merge.ts's mergeTvdbIntoAnime()) over this whenever it exists; this stays
+ * as the fallback for anything not merged yet.
  */
 export function buildMappingResponse(row: MappingDbRow) {
   return {

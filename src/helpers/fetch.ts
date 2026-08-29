@@ -4,7 +4,7 @@
  * some hosts, independent of whether the request is otherwise legitimate --
  * this project already ran into that with AniDB's Cloudflare protection.
  * Every outbound fetch this project makes (XML/JSON source downloads, and
- * eventually TVDB) should go through this instead of the bare global
+ * TVDB's v4 API) should go through this instead of the bare global
  * `fetch`, so they all present as an ordinary browser request rather than
  * an unmistakably-automated one.
  */

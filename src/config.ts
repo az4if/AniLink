@@ -16,7 +16,13 @@ export const Config = {
 
   tvdb: {
     apiKey: process.env.TVDB_API_KEY ?? '',
-    apiPin: process.env.TVDB_API_PIN ?? ''
+    apiPin: process.env.TVDB_API_PIN ?? '',
+    // Base URL for the TVDB v4 API itself. NOT the same thing as
+    // TVDB_API_KEY (the long-lived credential from
+    // thetvdb.com/api-information) and NOT the same thing as the Bearer
+    // token the app exchanges that key for at runtime -- see the docstring
+    // on getToken() in tvdb-client.ts.
+    baseUrl: process.env.TVDB_API_URL ?? 'https://api4.thetvdb.com/v4'
   },
 
   // Delay after each single "ask this provider for one anime's episode

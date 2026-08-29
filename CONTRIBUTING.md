@@ -114,16 +114,24 @@ The TVDB v4 client (`src/mapping/tvdb-client.ts`) is also built: exchanges
 `TVDB_API_KEY` for a Bearer token via `POST /login` (cached in-memory,
 refreshed on expiry or a 401), then `GET /series/{id}/extended` for
 status/image/overview and paginated `GET /series/{id}/episodes/official`
-for the full episode list. Plus the merge engine
-(`src/mapping/merge.ts`) that turns a fetched TVDB series + episode list
-into the public `/mappings` response shape via `reverseResolveRegular()`
--- including the tvdb_id-shared-by-multiple-anidb-entries case (Ghost in
-the Shell), where each entry gets its own episode numbers off its own
-offset against the same shared TVDB data. `description`/`image`/
-`episodes` populate automatically once `POST /indexer/tvdb/*` has run for
-a title; `mappings.routes.ts` was already written to prefer `anime.data`
-over the plain `mapping` fallback the moment it exists, so no route code
-needed to change.
+for the full episode list. Each episode's `title`/`overview` come back in
+whatever language TVDB's default record happens to be; English
+specifically (`titleEn`/`overviewEn`) is a second pass over
+`GET /episodes/{id}/translations/eng` -- there's no bulk/batch translation
+endpoint in the v4 API, so this is one extra request per episode, skipped
+entirely for episodes whose own `nameTranslations`/`overviewTranslations`
+arrays don't list `eng` at all, and run with modest fixed concurrency
+(TVDB doesn't publish a documented v4 rate limit, unlike some other
+providers -- see `TRANSLATION_CONCURRENCY` in tvdb-client.ts). Plus the
+merge engine (`src/mapping/merge.ts`) that turns a fetched TVDB series +
+episode list into the public `/mappings` response shape via
+`reverseResolveRegular()` -- including the tvdb_id-shared-by-multiple-
+anidb-entries case (Ghost in the Shell), where each entry gets its own
+episode numbers off its own offset against the same shared TVDB data.
+`description`/`image`/`episodes` populate automatically once
+`POST /indexer/tvdb/*` has run for a title; `mappings.routes.ts` was
+already written to prefer `anime.data` over the plain `mapping` fallback
+the moment it exists, so no route code needed to change.
 
 **Also open:** episode data for the ~56% of the catalog with no TVDB
 mapping at all. Nothing sources episode lists for those right now.
@@ -137,8 +145,8 @@ supported for v1.
 npm test                                # resolver: 19 assertions against real XML data
 npx tsx test/sources.test.ts            # Fribb + lists-main parsers against real JSON
 npx tsx test/response.test.ts           # /mappings response shape
-npx tsx test/merge.test.ts              # TVDB episode -> AniDB number reversal, incl. absolute numbering
-npx tsx test/tvdb-client.test.ts        # login/token caching, pagination, 401-retry (mocked fetch, no real TVDB call)
+npx tsx test/merge.test.ts               # TVDB episode -> AniDB number reversal, incl. absolute numbering + English title/overview pass-through
+npx tsx test/tvdb-client.test.ts         # login/token caching, pagination, 401-retry, English-translation fetch/skip/404-handling (mocked fetch, no real TVDB call)
 npx tsx test/queue.test.ts              # JobQueue: FIFO, priority preemption, dedup
 npx tsx test/scheduler.test.ts          # regression test for the setInterval overflow bug
 npx tsx test/sequential-runner.test.ts  # per-id ask/get/index/wait loop timing + resume + yield

@@ -7,6 +7,14 @@ export type TvdbEpisode = {
   absoluteNumber: number | null;
   name: string | null;
   overview: string | null;
+  // English specifically, regardless of whatever language `name`/`overview`
+  // above happen to be (TVDB doesn't document what determines that -- see
+  // fetchSeriesSummary()'s neighbor, fillEnglishTranslations(), below).
+  // null when no English translation exists for this episode at all, which
+  // does happen (recently-aired/simulcast episodes especially) -- not an
+  // error.
+  titleEn: string | null;
+  overviewEn: string | null;
   aired: string | null;
   image: string | null;
 };
@@ -105,15 +113,62 @@ async function fetchSeriesSummary(tvdbId: number): Promise<Omit<TvdbSeriesData, 
 // an infinite loop. No real anime has anywhere near this many episodes.
 const MAX_EPISODE_PAGES = 50;
 
+type EpisodeWithMeta = TvdbEpisode & { _id: number; _hasEng: boolean };
+
+// TheTVDB's v4 docs don't publish a request-per-second limit (unlike e.g.
+// TMDB, which documents ~50/s). Rather than guess a number that might be
+// too aggressive, this keeps translation fetches to a small fixed
+// concurrency -- slower than it needs to be, most likely, but never a
+// burst large enough to risk tripping abuse detection.
+const TRANSLATION_CONCURRENCY = 8;
+
+/**
+ * English name/overview aren't in the base episode list -- TVDB only
+ * exposes them via GET /episodes/{id}/translations/eng, one call PER
+ * EPISODE, with no bulk/batch variant in the v4 API. For a long-running
+ * anime that's potentially hundreds of extra requests per sync, so this
+ * skips any episode whose own `nameTranslations`/`overviewTranslations`
+ * arrays (TVDB's own record of which languages exist for it) don't list
+ * "eng" at all -- no point spending a request to confirm what TVDB
+ * already told us. The rest run with the fixed concurrency above rather
+ * than fully serial (slow) or fully parallel (see above).
+ *
+ * A failure fetching any one episode's translation (no English
+ * translation exists -- a 404 -- or a transient error) just leaves that
+ * episode's titleEn/overviewEn null. One episode's translation being
+ * unavailable shouldn't fail the whole series fetch.
+ */
+async function fillEnglishTranslations(episodes: EpisodeWithMeta[]): Promise<void> {
+  const candidates = episodes.filter((ep) => ep._hasEng);
+  let cursor = 0;
+
+  async function worker() {
+    while (cursor < candidates.length) {
+      const ep = candidates[cursor++];
+      try {
+        const body = await tvdbGet(`/episodes/${ep._id}/translations/eng`);
+        ep.titleEn = body?.data?.name ?? null;
+        ep.overviewEn = body?.data?.overview ?? null;
+      } catch {
+        // left null -- see docstring above.
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(TRANSLATION_CONCURRENCY, candidates.length) }, worker));
+}
+
 /**
  * All episodes for a series under TVDB's "official" season-type -- the
  * numbering scheme this project's schema (defaultTvdbSeason,
  * tvdbEpisodeOffset, mapping-list) is defined against. Paginated per the
  * v4 spec (`page` query param, `links.next` in the response); walked until
- * a page comes back empty or `links.next` is falsy.
+ * a page comes back empty or `links.next` is falsy. English title/overview
+ * are filled in as a second pass once the full list is known -- see
+ * fillEnglishTranslations().
  */
 async function fetchAllEpisodes(tvdbId: number): Promise<TvdbEpisode[]> {
-  const episodes: TvdbEpisode[] = [];
+  const episodes: EpisodeWithMeta[] = [];
 
   for (let page = 0; page < MAX_EPISODE_PAGES; page++) {
     const body = await tvdbGet(`/series/${tvdbId}/episodes/official?page=${page}`);
@@ -127,15 +182,20 @@ async function fetchAllEpisodes(tvdbId: number): Promise<TvdbEpisode[]> {
         absoluteNumber: ep.absoluteNumber ?? null,
         name: ep.name ?? null,
         overview: ep.overview ?? null,
+        titleEn: null,
+        overviewEn: null,
         aired: ep.aired ?? null,
-        image: ep.image ?? null
+        image: ep.image ?? null,
+        _id: ep.id,
+        _hasEng: Boolean(ep.nameTranslations?.includes('eng') || ep.overviewTranslations?.includes('eng'))
       });
     }
 
     if (!body?.links?.next) break;
   }
 
-  return episodes;
+  await fillEnglishTranslations(episodes);
+  return episodes.map(({ _id, _hasEng, ...rest }) => rest);
 }
 
 /** Everything this project needs for one tvdb_id: series summary + its full official-order episode list. Two requests (summary, then episode pages) -- see fetchSeriesSummary()'s docstring for why they're separate calls. */

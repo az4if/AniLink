@@ -32,7 +32,9 @@ export type MergedEpisode = {
   episode: number; // TVDB episode number within that season
   absoluteNumber: number | null;
   title: string | null;
+  titleEn: string | null;
   overview: string | null;
+  overviewEn: string | null;
   aired: string | null;
   image: string | null;
 };
@@ -66,7 +68,9 @@ export function buildEpisodes(row: MappingRow, episodes: TvdbEpisode[]): MergedE
       episode: ep.number,
       absoluteNumber: ep.absoluteNumber,
       title: ep.name,
+      titleEn: ep.titleEn,
       overview: ep.overview,
+      overviewEn: ep.overviewEn,
       aired: ep.aired,
       image: ep.image
     });

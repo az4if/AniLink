@@ -22,7 +22,7 @@ function check(label: string, actual: unknown, expected: unknown) {
 }
 
 function ep(partial: Partial<TvdbEpisode> & { seasonNumber: number; number: number }): TvdbEpisode {
-  return { absoluteNumber: null, name: null, overview: null, aired: null, image: null, ...partial };
+  return { absoluteNumber: null, name: null, overview: null, titleEn: null, overviewEn: null, aired: null, image: null, ...partial };
 }
 
 // --- Cowboy Bebop (anidbid=23) -- plain default season + offset --------
@@ -32,8 +32,17 @@ function ep(partial: Partial<TvdbEpisode> & { seasonNumber: number; number: numb
   console.log('Cowboy Bebop (23)');
 
   const episodes = [
-    ep({ seasonNumber: 1, number: 5, name: 'Ballad of Fallen Angels', overview: 'ov', aired: '1998-05-27', image: '/img5.jpg' }),
-    ep({ seasonNumber: 1, number: 1, name: 'Asteroid Blues' }),
+    ep({
+      seasonNumber: 1,
+      number: 5,
+      name: 'Ballad of Fallen Angels',
+      overview: 'ov',
+      titleEn: 'Ballad of Fallen Angels (EN)',
+      overviewEn: 'ov-en',
+      aired: '1998-05-27',
+      image: '/img5.jpg'
+    }),
+    ep({ seasonNumber: 1, number: 1, name: 'Asteroid Blues' }), // no English translation available -- titleEn/overviewEn stay null
     // season 0 (specials) has no reverse mapping for Cowboy Bebop's mapping-list
     // (its mapping-list entries are anidbseason="0", which reverseResolveRegular
     // deliberately never reverses -- see resolver.ts) -- should be dropped.
@@ -42,16 +51,19 @@ function ep(partial: Partial<TvdbEpisode> & { seasonNumber: number; number: numb
 
   const result = buildEpisodes(row, episodes);
   check('drops the un-reversible season-0 special, keeps + sorts the two regulars', result.map((r) => r.number), [1, 5]);
-  check('carries TVDB metadata through untouched', result[1], {
+  check('carries TVDB metadata through untouched, including English title/overview when present', result[1], {
     number: 5,
     season: 1,
     episode: 5,
     absoluteNumber: null,
     title: 'Ballad of Fallen Angels',
+    titleEn: 'Ballad of Fallen Angels (EN)',
     overview: 'ov',
+    overviewEn: 'ov-en',
     aired: '1998-05-27',
     image: '/img5.jpg'
   });
+  check('an episode with no English translation available carries titleEn/overviewEn through as null, not dropped', result[0].titleEn, null);
 }
 
 // --- anidbid=19 -- absolute numbering (defaulttvdbseason="a") ----------
@@ -66,7 +78,7 @@ function ep(partial: Partial<TvdbEpisode> & { seasonNumber: number; number: numb
 
   const result = buildEpisodes(row, episodes);
   check('absolute-numbered show uses absoluteNumber as the canonical number, drops episodes missing one', result, [
-    { number: 27, season: 1, episode: 3, absoluteNumber: 27, title: 'Ep 27', overview: null, aired: null, image: null }
+    { number: 27, season: 1, episode: 3, absoluteNumber: 27, title: 'Ep 27', titleEn: null, overview: null, overviewEn: null, aired: null, image: null }
   ]);
 }
 

@@ -153,14 +153,18 @@ finishes for a given title, `description`/`image`/`episodes` are `null`/
   "description": "In the year 2071, a ragtag crew of bounty hunters...",
   "image": "https://artworks.thetvdb.com/banners/posters/76885-1.jpg",
   "episodes": [
-    { "number": 1, "season": 1, "episode": 1, "absoluteNumber": 1, "title": "Asteroid Blues", "overview": "...", "aired": "1998-04-03", "image": null }
+    { "number": 1, "season": 1, "episode": 1, "absoluteNumber": 1, "title": "Asteroid Blues", "titleEn": "Asteroid Blues", "overview": "...", "overviewEn": "...", "aired": "1998-04-03", "image": null }
     /* ...and so on */
   ]
 }
 ```
 
 `episodes[].number` is the canonical AniDB regular-episode number
-(`season`/`episode` are TVDB's own). Specials aren't included -- see
+(`season`/`episode` are TVDB's own). `title`/`overview` are whatever
+language TVDB's default record happens to be in; `titleEn`/`overviewEn`
+are always English specifically (fetched via TVDB's per-episode
+translations endpoint), `null` when no English translation exists for
+that episode at all -- not an error. Specials aren't included -- see
 CONTRIBUTING.md for why.
 
 `ids.tvdb: null` means TVDB coverage doesn't exist for that anime (~56% of

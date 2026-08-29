@@ -198,7 +198,7 @@ async function fetchAllEpisodes(tvdbId: number): Promise<TvdbEpisode[]> {
   return episodes.map(({ _id, _hasEng, ...rest }) => rest);
 }
 
-/** Everything this project needs for one tvdb_id: series summary + its full official-order episode list. Two requests (summary, then episode pages) -- see fetchSeriesSummary()'s docstring for why they're separate calls. */
+/** Everything this project needs for one tvdb_id: series summary, its full official-order episode list, and English title/overview per episode where available. Three request types per series (summary, paginated episode pages, then per-episode English translations) -- see fetchSeriesSummary()'s and fillEnglishTranslations()'s docstrings for why each is separate. */
 export async function fetchTvdbSeries(tvdbId: number): Promise<TvdbSeriesData> {
   const summary = await fetchSeriesSummary(tvdbId);
   const episodes = await fetchAllEpisodes(tvdbId);

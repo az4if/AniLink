@@ -135,7 +135,7 @@ function enrichEpisodes(episodes: MergedEpisode[], source: AniZipData | null): M
  * available now. Providers often expose scheduled/future episodes early;
  * those must never reach the public index until the feed advances.
  */
-function limitToAiredProgress(row: MappingDbRow, episodes: MergedEpisode[]): MergedEpisode[] {
+export function limitToAiredProgress(row: Pick<MappingDbRow, 'airing' | 'episodeProgress'>, episodes: MergedEpisode[]): MergedEpisode[] {
   if (!row.airing || row.episodeProgress === null) return episodes;
   return episodes.filter((episode) => episode.number <= row.episodeProgress!);
 }

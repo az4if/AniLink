@@ -98,8 +98,8 @@ For how this works internally, why it's built this way, and testing, see
 | `RENDER_KEEP_ALIVE` | `false` | `true` only on Render free tier. |
 | `ENABLE_SCHEDULER` | `false` | Turns on the in-process scheduler. |
 | `MAPPING_SYNC_HOURS` | `3` | XML/Fribb/ids/airing refresh cadence. |
-| `TVDB_SYNC_HOURS` | `6` | TVDB new+airing pass cadence. |
-| `TVDB_FULL_SYNC_HOURS` | `720` | TVDB full-catalog pass cadence. |
+| `PROVIDER_SYNC_HOURS` | `6` | Unified TVDB → TMDB fallback → ani.zip incremental pass cadence. |
+| `PROVIDER_FULL_SYNC_HOURS` | `720` | Unified provider full-catalog pass cadence. |
 | `INDEX_DELAY` | `5` | Seconds between TVDB/TMDB indexing targets and ani.zip write batches. |
 | `TVDB_API_KEY` / `TVDB_API_PIN` | *(empty)* | thetvdb.com/api-information. Most keys don't need a PIN -- leave blank and only add one if login rejects the key. |
 | `TVDB_API_URL` | `https://api4.thetvdb.com/v4` | Base URL for the TVDB v4 API. Not the same thing as `TVDB_API_KEY` -- only override this if you're pointing at something other than the real API. |
@@ -107,8 +107,6 @@ For how this works internally, why it's built this way, and testing, see
 | `TMDB_API_URL` / `TMDB_IMAGE_URL` | TMDB production URLs | Override only for a proxy/mock. |
 | `ANI_ZIP_PATH` | `./ani.zip` | Optional local JSON-in-ZIP cross-reference source; full source records are retained. |
 | `ANI_ZIP_API_URL` | `https://api.ani.zip` | Remote metadata enrichment source; no key required. |
-| `TMDB_SYNC_HOURS` / `TMDB_FULL_SYNC_HOURS` | `6` / `720` | TMDB incremental/full indexing cadence. |
-| `ANI_ZIP_SYNC_HOURS` / `ANI_ZIP_FULL_SYNC_HOURS` | `12` / `720` | Remote ani.zip incremental/full enrichment cadence. |
 | `ANIME_LIST_MASTER_XML_URL` | Anime-Lists/anime-lists | Override to point at a fork/mirror. |
 | `FRIBB_JSON_URL` | Fribb/anime-lists | Same. |
 | `ANIME_JSON_URL` | anime-and-manga/lists | Same. |
@@ -127,12 +125,8 @@ For how this works internally, why it's built this way, and testing, see
 | POST | `/indexer/mapping/fribb-refresh` | Fribb only |
 | POST | `/indexer/mapping/lists-refresh` | lists-main ids + airing |
 | POST | `/indexer/mapping/ani-zip-refresh` | optional local ani.zip import |
-| POST | `/indexer/tvdb/incremental` | new + airing tvdb_ids |
-| POST | `/indexer/tvdb/full` | every mapped tvdb_id |
-| POST | `/indexer/tmdb/incremental` | new + airing TMDB TV/movie IDs |
-| POST | `/indexer/tmdb/full` | every mapped TMDB TV/movie ID |
-| POST | `/indexer/ani-zip/incremental` | new + airing remote ani.zip records |
-| POST | `/indexer/ani-zip/full` | every AniDB record with an AniList, MAL, or Kitsu ID |
+| POST | `/indexer/providers/incremental` | unified new + airing provider pass |
+| POST | `/indexer/providers/full` | unified whole-catalog provider pass |
 
 `POST` routes require an `x-admin-key` header matching `ADMIN_KEY` -- unless
 `ADMIN_KEY` is unset/empty, in which case they're open to anyone.
@@ -190,6 +184,11 @@ are always English specifically (fetched via TVDB's per-episode
 translations endpoint), `null` when no English translation exists for
 that episode at all -- not an error. Specials aren't included -- see
 CONTRIBUTING.md for why.
+
+For an airing title, `episodeProgress` is a hard publication ceiling:
+provider data for a scheduled next episode may be cached, but it is never
+returned by `/mappings` until the current-airing feed advances to that
+episode. A title at episode 1175 therefore returns at most episode 1175.
 
 `ids.tvdb: null` means TVDB coverage doesn't exist for that anime (~56% of
 the catalog) -- not an error. If its mapping has a TMDB ID, the TMDB pass

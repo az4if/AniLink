@@ -75,38 +75,27 @@ Once on, three independent lanes:
    the four remote mapping sources
    and updates `mapping`. Knows exactly which anidb_ids are new since last
    time.
-2. **Every `TVDB_SYNC_HOURS`** -- asks TVDB for episode data, but only for
-   anime that are currently airing or have never been asked about. First
-   run, "never asked" means everything, so it's slow; every run after that
-   only touches the small new+airing subset, so it's fast.
-   **`TVDB_FULL_SYNC_HOURS`** ignores that shortcut and re-asks about
-   every mapped anime, catching anything that slipped through (e.g. an
-   anime that gained a TVDB mapping later on).
-3. **Every `TMDB_SYNC_HOURS`** -- indexes mapped TV/movie metadata,
-   episodes, translations, and artwork using the same new-or-airing/full
-   policy. TMDB artwork is stored even when TVDB exists.
-4. **Every `ANI_ZIP_SYNC_HOURS`** -- enriches records with AniList, MAL, or
-   Kitsu IDs from the remote API. Existing primary mappings are never
-   overwritten; only gaps are filled, while all original response fields
-   stay available for serving.
+2. **Every `PROVIDER_SYNC_HOURS`** -- runs one ordered pipeline for each
+   new or airing AniDB record: TVDB when it has a TVDB ID, otherwise TMDB
+   when it has a TMDB ID, then remote ani.zip every time. The final stage
+   supplies localized titles, direct episode mappings, artwork, and mapping
+   gap fills. If neither provider ID exists, only the ani.zip stage runs,
+   using the AniDB ID as the fallback lookup. `PROVIDER_FULL_SYNC_HOURS`
+   runs that exact same pipeline for the full catalog.
 
-Mapping jobs queue behind mapping jobs; each provider has its own queue --
+Mapping jobs queue behind mapping jobs; the provider pipeline has one queue --
 nothing in the same lane overlaps and corrupts a write. The lanes are
 otherwise independent.
 
 ## The queue
 
-Three queues, `src/scheduler/queue.ts`:
+Two queues, `src/scheduler/queue.ts`:
 
 - **`jsonQueue`** -- local archive plus the four remote mapping sources. No external rate limit;
   exists so two of them can't write to the DB at once.
-- **`tvdbQueue`** -- TVDB jobs. Matters for a real reason: TVDB has one
-  shared rate budget, so a fast urgent job (new+airing check) needs to be
-  able to make a slow full sweep step aside.
-- **`tmdbQueue`** -- TMDB TV/movie jobs, isolated so a long catalog pass
-  cannot block mapping or TVDB refreshes.
-- **`aniZipQueue`** -- remote ani.zip enrichment, including a per-title
-  `INDEX_DELAY` so its full sweep is resumable and gentle.
+- **`providerQueue`** -- the ordered TVDB → TMDB fallback → ani.zip pass.
+  One sequential queue makes the full and incremental behavior identical,
+  resumable, and rate-limited through `INDEX_DELAY`.
 
 "Step aside" is cooperative yielding, not getting killed mid-write: the
 running job checks a `shouldYield()` flag between each unit of work and,

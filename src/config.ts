@@ -101,17 +101,7 @@ export const Config = {
     enabled: (process.env.ENABLE_SCHEDULER ?? 'false').toLowerCase() === 'true',
     // XML + Fribb + lists-main ids + lists-main airing, all refreshed together
     mappingSyncHours: Number(process.env.MAPPING_SYNC_HOURS ?? 3),
-    // TVDB, new + currently-airing tvdb_ids only (naturally == everything
-    // on the very first run, since nothing's cached yet -- see tvdb-targets.ts)
-    tvdbSyncHours: Number(process.env.TVDB_SYNC_HOURS ?? 6),
-    // TVDB, full resync of every mapped tvdb_id regardless of cache state
-    tvdbFullSyncHours: Number(process.env.TVDB_FULL_SYNC_HOURS ?? 24 * 30),
-    tmdbSyncHours: Number(process.env.TMDB_SYNC_HOURS ?? 6),
-    tmdbFullSyncHours: Number(process.env.TMDB_FULL_SYNC_HOURS ?? 24 * 30),
-    aniZipSyncHours: Number(process.env.ANI_ZIP_SYNC_HOURS ?? 12),
-    aniZipFullSyncHours: Number(process.env.ANI_ZIP_FULL_SYNC_HOURS ?? 24 * 30),
-    // Unified pipeline timing. The legacy provider-specific settings remain
-    // accepted in env files, but all providers now run together here.
+    // Unified pipeline timing.
     providerSyncHours: Number(process.env.PROVIDER_SYNC_HOURS ?? 6),
     providerFullSyncHours: Number(process.env.PROVIDER_FULL_SYNC_HOURS ?? 24 * 30)
   }

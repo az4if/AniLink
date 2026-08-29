@@ -3,6 +3,7 @@ import { db, schema } from '../db/index.js';
 import { fetchTvdbSeries } from './tvdb-client.js';
 import { fetchTmdb } from './tmdb-client.js';
 import { indexOneAniZip } from './ani-zip-index.js';
+import { indexAniListForAnime } from './anilist-index.js';
 import { remergeAnime } from './merge.js';
 import { runSequential } from './sequential-runner.js';
 import { Config } from '../config.js';
@@ -21,15 +22,17 @@ export type ProviderTarget = { anidbId: number };
  * pass, keeping one predictable provider pass per title.
  */
 export async function getProviderSyncTargets(mode: 'incremental' | 'full'): Promise<ProviderTarget[]> {
-  const [mappings, tvdbCached, tmdbCached, aniZipCached] = await Promise.all([
-    db.query.mapping.findMany({ columns: { anidbId: true, tvdbId: true, tmdbTvId: true, tmdbMovieIds: true, airing: true } }),
+  const [mappings, tvdbCached, tmdbCached, aniZipCached, anilistCached] = await Promise.all([
+    db.query.mapping.findMany({ columns: { anidbId: true, anilistId: true, tvdbId: true, tmdbTvId: true, tmdbMovieIds: true, airing: true } }),
     db.query.tvdbCache.findMany({ columns: { tvdbId: true } }),
     db.query.tmdbCache.findMany({ columns: { cacheKey: true } }),
-    db.query.aniZipCache.findMany({ columns: { anidbId: true, apiData: true } })
+    db.query.aniZipCache.findMany({ columns: { anidbId: true, apiData: true } }),
+    db.query.anilistCache.findMany({ columns: { anilistId: true } })
   ]);
   const tvdbIds = new Set(tvdbCached.map((entry) => entry.tvdbId));
   const tmdbKeys = new Set(tmdbCached.map((entry) => entry.cacheKey));
   const aniZipIds = new Set(aniZipCached.filter((entry) => entry.apiData).map((entry) => entry.anidbId));
+  const anilistIds = new Set(anilistCached.map((entry) => entry.anilistId));
 
   return mappings
     .filter((row) => {
@@ -41,7 +44,7 @@ export async function getProviderSyncTargets(mode: 'incremental' | 'full'): Prom
           : (row.tmdbMovieIds ?? []).length > 0
             ? (row.tmdbMovieIds ?? []).every((id) => tmdbKeys.has(`movie:${id}`))
             : true;
-      return !providerCached || !aniZipIds.has(row.anidbId);
+      return !providerCached || !aniZipIds.has(row.anidbId) || (row.anilistId !== null && !anilistIds.has(row.anilistId));
     })
     .map((row) => ({ anidbId: row.anidbId }))
     .sort((a, b) => a.anidbId - b.anidbId);
@@ -67,6 +70,15 @@ async function cacheTmdb(tmdbId: number, mediaType: 'tv' | 'movie'): Promise<voi
 async function indexOneProvider(target: ProviderTarget): Promise<void> {
   const row = await db.query.mapping.findFirst({ where: eq(schema.mapping.anidbId, target.anidbId) });
   if (!row) return;
+
+  if (row.anilistId) {
+    try {
+      await indexAniListForAnime(row.anidbId, row.anilistId);
+    } catch (error) {
+      // Provider enrichment must continue when AniList is briefly unavailable.
+      console.error(`[provider-index] AniList stage failed for anidb_id=${row.anidbId}:`, error instanceof Error ? error.message : error);
+    }
+  }
 
   try {
     if (row.tvdbId) {

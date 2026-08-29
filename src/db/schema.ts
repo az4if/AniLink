@@ -110,6 +110,38 @@ export const aniZipCache = pgTable('ani_zip_cache', {
   apiScrapedAt: timestamp('api_scraped_at', { withTimezone: true })
 });
 
+/** Full AniList media records, including dates, relation graph and airing state. */
+export const anilistCache = pgTable('anilist_cache', {
+  anilistId: integer('anilist_id').primaryKey(),
+  rawData: jsonb('raw_data').notNull(),
+  format: text('format'),
+  status: text('status'),
+  episodeCount: integer('episode_count'),
+  nextEpisode: integer('next_episode'),
+  lastScrapedAt: timestamp('last_scraped_at', { withTimezone: true }).notNull().defaultNow()
+});
+
+/**
+ * A reviewable AniDB ↔ AniList segment. Direct IDs are confirmed mappings;
+ * franchise relations are candidates only until provider evidence supports a
+ * combined range. This avoids silently joining unrelated cours/specials.
+ */
+export const animeSegment = pgTable('anime_segment', {
+  segmentKey: text('segment_key').primaryKey(), // `${anidbId}:${anilistId}`
+  anidbId: integer('anidb_id').notNull().references(() => mapping.anidbId),
+  anilistId: integer('anilist_id').notNull(),
+  relationType: text('relation_type').notNull(), // SELF | PREQUEL | SEQUEL | SIDE_STORY | PARENT | ...
+  format: text('format'), // TV | OVA | ONA | SPECIAL | MOVIE | ...
+  title: text('title'),
+  startDate: text('start_date'),
+  endDate: text('end_date'),
+  episodeStart: integer('episode_start'),
+  episodeEnd: integer('episode_end'),
+  confidence: integer('confidence').notNull(), // 0-100; direct mapping = 100
+  evidence: jsonb('evidence').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
+});
+
 /** Final merged record -- this is what /mappings serves. Shape of `data` matches the README example. */
 export const anime = pgTable('anime', {
   anidbId: integer('anidb_id').primaryKey().references(() => mapping.anidbId),

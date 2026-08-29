@@ -22,6 +22,13 @@
       "when": 1788031514004,
       "tag": "0002_polite_grey_gargoyle",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1788037271776,
+      "tag": "0003_unique_zeigeist",
+      "breakpoints": true
     }
   ]
 }

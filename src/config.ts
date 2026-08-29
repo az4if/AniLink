@@ -37,6 +37,10 @@ export const Config = {
     apiUrl: process.env.ANI_ZIP_API_URL ?? 'https://api.ani.zip'
   },
 
+  anilist: {
+    apiUrl: process.env.ANILIST_API_URL ?? 'https://graphql.anilist.co'
+  },
+
   // Delay after each single "ask this provider for one anime's episode
   // data, get the response, index it" step, before moving to the next id.
   // Shared by the TVDB and TMDB per-id provider loops. See

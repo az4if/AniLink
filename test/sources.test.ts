@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { toFribbDbRow, type FribbEntry } from '../src/mapping/fribb.js';
 import { toAiringFields } from '../src/mapping/lists.js';
 
@@ -17,7 +18,7 @@ function check(label: string, actual: unknown, expected: unknown) {
   }
 }
 
-const dir = new URL('.', import.meta.url).pathname;
+const dir = fileURLToPath(new URL('.', import.meta.url));
 
 // --- Fribb-format JSON --------------------------------------------------
 {

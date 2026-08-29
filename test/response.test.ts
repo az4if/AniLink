@@ -78,7 +78,9 @@ check('response shapes ids/type/title/airing correctly, nulls image/description/
   episodeCount: null,
   specialCount: null,
   artworks: [],
-  providers: { tvdb: null, tmdb: null, aniZip: null },
+  anilist: null,
+  relatedSpecials: [],
+  providers: { tvdb: null, tmdb: null, aniZip: null, anilist: null },
   updatedAt: cowboyBebopRow.updatedAt
 });
 

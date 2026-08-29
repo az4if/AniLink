@@ -46,7 +46,9 @@ export function buildMappingResponse(row: MappingDbRow) {
     episodeCount: null as number | null,
     specialCount: null as number | null,
     artworks: [] as unknown[],
-    providers: { tvdb: null, tmdb: null, aniZip: null },
+    anilist: null as unknown,
+    relatedSpecials: [] as unknown[],
+    providers: { tvdb: null, tmdb: null, aniZip: null, anilist: null },
     updatedAt: row.updatedAt
   };
 }

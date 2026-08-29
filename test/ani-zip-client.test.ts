@@ -1,4 +1,4 @@
-import { normalizeAniZipApiData } from '../src/mapping/ani-zip-client.js';
+import { decodeAniZipPayload, normalizeAniZipApiData } from '../src/mapping/ani-zip-client.js';
 
 let pass = 0;
 let fail = 0;
@@ -49,6 +49,7 @@ check('normalizes direct episode mapping and multilingual metadata', data.episod
 check('retains artwork with source and type', data.artworks.map((artwork) => [artwork.source, artwork.type, artwork.url]), [
   ['ani-zip', 'background', 'https://example.com/banner.jpg'], ['ani-zip', 'poster', 'https://example.com/poster.jpg'], ['ani-zip', 'logo', 'https://example.com/logo.png']
 ]);
+check('accepts the API JSON-string transport shape', decodeAniZipPayload(JSON.stringify({ mappings: { anidb_id: 69 } })), { mappings: { anidb_id: 69 } });
 
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

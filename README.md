@@ -37,24 +37,20 @@ For how this works internally, why it's built this way, and testing, see
    default (open). Set `ADMIN_KEY` in `.env` and pass it as `x-admin-key`
    on every `POST /indexer/*` call **before deploying publicly** -- left
    unset, anyone can trigger these jobs.
-5. **Fetch provider metadata, episodes, and artwork:** set
+5. **Fetch provider metadata, episodes, artwork, and validation data:** set
    `TVDB_API_KEY` in `.env` (register one at
-   [thetvdb.com/api-information](https://thetvdb.com/api-information)),
-   then:
+   [thetvdb.com/api-information](https://thetvdb.com/api-information)) and
+   optionally `TMDB_API_KEY`, then run the one ordered pipeline:
    ```bash
-   curl -X POST http://localhost:3000/indexer/tvdb/incremental
+   curl -X POST http://localhost:3000/indexer/providers/incremental
    ```
-   Set `TMDB_API_KEY` as well, then run:
-   ```bash
-   curl -X POST http://localhost:3000/indexer/tmdb/incremental
-   ```
-   AniLink saves TVDB and TMDB artwork together. TVDB remains preferred for
-   episode data; TMDB becomes the fallback for mapped shows with no TVDB ID.
-   Without either key set, `/mappings` still works -- `description`, `image`,
-   and `episodes` just stay empty rather than faked. This is slow the
-   first time (`INDEX_DELAY` seconds per distinct provider target, roughly
-   9,400 TVDB IDs plus mapped TMDB IDs) -- run it in the background and move
-   on.
+   Each mapped entry first gets AniList validation metadata; it then uses
+   TVDB when a TVDB ID exists, otherwise TMDB when mapped, and always ends
+   with `api.ani.zip`. AniList and ani.zip need no API key. The pipeline
+   saves artwork from both providers, multilingual titles, provider-ID gap
+   fills, episode metadata, release dates, and relation/special references.
+   It pauses for `INDEX_DELAY` seconds between entries, so run the first
+   whole-catalog pass in the background.
 6. **Confirm it worked:**
    ```bash
    curl http://localhost:3000/indexer/status
@@ -98,15 +94,16 @@ For how this works internally, why it's built this way, and testing, see
 | `RENDER_KEEP_ALIVE` | `false` | `true` only on Render free tier. |
 | `ENABLE_SCHEDULER` | `false` | Turns on the in-process scheduler. |
 | `MAPPING_SYNC_HOURS` | `3` | XML/Fribb/ids/airing refresh cadence. |
-| `PROVIDER_SYNC_HOURS` | `6` | Unified TVDB → TMDB fallback → ani.zip incremental pass cadence. |
+| `PROVIDER_SYNC_HOURS` | `6` | Unified AniList → TVDB/TMDB fallback → ani.zip incremental pass cadence. |
 | `PROVIDER_FULL_SYNC_HOURS` | `720` | Unified provider full-catalog pass cadence. |
-| `INDEX_DELAY` | `5` | Seconds between TVDB/TMDB indexing targets and ani.zip write batches. |
+| `INDEX_DELAY` | `5` | Seconds between complete provider-pipeline entries, including AniList and ani.zip. |
 | `TVDB_API_KEY` / `TVDB_API_PIN` | *(empty)* | thetvdb.com/api-information. Most keys don't need a PIN -- leave blank and only add one if login rejects the key. |
 | `TVDB_API_URL` | `https://api4.thetvdb.com/v4` | Base URL for the TVDB v4 API. Not the same thing as `TVDB_API_KEY` -- only override this if you're pointing at something other than the real API. |
 | `TMDB_API_KEY` | *(empty)* | TMDB v4 Read Access Token. Enables TMDB TV/movie metadata, episode fallback, and artwork indexing. |
 | `TMDB_API_URL` / `TMDB_IMAGE_URL` | TMDB production URLs | Override only for a proxy/mock. |
 | `ANI_ZIP_PATH` | `./ani.zip` | Optional local JSON-in-ZIP cross-reference source; full source records are retained. |
 | `ANI_ZIP_API_URL` | `https://api.ani.zip` | Remote metadata enrichment source; no key required. |
+| `ANILIST_API_URL` | `https://graphql.anilist.co` | AniList GraphQL endpoint for episode totals, release/air data, titles, and relations; no key required. |
 | `ANIME_LIST_MASTER_XML_URL` | Anime-Lists/anime-lists | Override to point at a fork/mirror. |
 | `FRIBB_JSON_URL` | Fribb/anime-lists | Same. |
 | `ANIME_JSON_URL` | anime-and-manga/lists | Same. |
@@ -128,7 +125,8 @@ For how this works internally, why it's built this way, and testing, see
 | POST | `/indexer/providers/incremental` | unified new + airing provider pass |
 | POST | `/indexer/providers/full` | unified whole-catalog provider pass |
 
-The final stage of every provider pass calls
+Every provider pass begins with AniList when an AniList ID is mapped, then
+uses TVDB or TMDB as its episode provider. The final stage calls
 [`api.ani.zip/mappings`](https://api.ani.zip/mappings?anilist_id=21). The
 stored response retains the exact lookup URL under `providers.aniZip.url`.
 
@@ -152,9 +150,9 @@ curl -X POST http://localhost:3000/indexer/mapping/sync \
   -H "x-admin-key: your-admin-key-here"
 ```
 
-`GET /mappings` response, once TVDB data has been fetched for this title
+`GET /mappings` response, once provider data has been fetched for this title
 (see [Environment variables](#environment-variables) for `TVDB_API_KEY` --
-without a key set, or before the first `POST /indexer/tvdb/*` sync
+without a key set, or before the first provider sync
 finishes for a given title, `description`/`image`/`episodes` are `null`/
 `[]` rather than faked):
 
@@ -177,7 +175,15 @@ finishes for a given title, `description`/`image`/`episodes` are `null`/
   "episodes": [
     { "number": 1, "season": 1, "episode": 1, "absoluteNumber": 1, "title": "Asteroid Blues", "titleEn": "Asteroid Blues", "titles": { "en": "Asteroid Blues", "ja": "アステロイド・ブルース" }, "anidbEpisodeId": 881, "overview": "...", "overviewEn": "...", "aired": "1998-04-03", "image": null }
     /* ...and so on */
-  ]
+  ],
+  "anilist": {
+    "id": 1,
+    "episodes": 26,
+    "status": "FINISHED",
+    "relations": [],
+    "validation": { "expectedEpisodeCount": 26, "indexedEpisodeCount": 26, "episodeCountStatus": "match" }
+  },
+  "relatedSpecials": []
 }
 ```
 
@@ -188,6 +194,11 @@ are always English specifically (fetched via TVDB's per-episode
 translations endpoint), `null` when no English translation exists for
 that episode at all -- not an error. Specials aren't included -- see
 CONTRIBUTING.md for why.
+
+`anilist.validation` makes disagreement visible instead of silently joining
+multiple related entries. `relatedSpecials` exposes referenced OVA, ONA, and
+special entries with their release dates and known episode counts. They are
+not injected into the main regular-episode list.
 
 For an airing title, `episodeProgress` is a hard publication ceiling:
 provider data for a scheduled next episode may be cached, but it is never
@@ -200,8 +211,9 @@ supplies the response description/image/episodes instead. Full unmodified
 TVDB extended records and TMDB API records stay in `tvdb_cache` and
 `tmdb_cache`. The ani.zip API response stays separately cached in
 `ani_zip_cache`, preserving all language titles and fields such as direct
-AniDB/TVDB episode IDs. `artworks` is the normalized, provenance-preserving
-view.
+AniDB/TVDB episode IDs. AniList records and conservative relation segments
+stay in `anilist_cache` and `anime_segment`. `artworks` is the normalized,
+provenance-preserving view.
 
 ## Troubleshooting
 

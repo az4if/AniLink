@@ -23,6 +23,7 @@ The remote mapping sources are static downloads; the optional local
 | `anime-airing.json` (anime-and-manga/lists) | `airing` / `episodeProgress` / `nextEpisodeAt`, currently-airing shows only |
 | local `ani.zip` | optional AniDB cross-reference seed/gap-fill; the complete original JSON records are retained in `ani_zip_cache` |
 | `api.ani.zip` | remote multilingual titles, provider-ID gap fills, direct AniDB/TVDB episode metadata, and artwork; raw responses remain separately cached |
+| AniList GraphQL | episode totals, airing/release dates, titles and relation graph; normalized records remain in `anilist_cache` |
 
 ## Why no live AniDB API access
 
@@ -33,9 +34,10 @@ that, AniLink never calls AniDB directly. IDs come entirely from the
 sources above. TVDB is preferred for actual episode data; mapped TMDB data
 is the fallback when TVDB has no ID or has not been fetched yet.
 
-Trade-off: specials/OVA/OP/ED/trailer episodes aren't mappable this way,
-since those only exist as distinct entries because of AniDB's own
-numbering scheme. Not supported for v1.
+Regular episode enumeration intentionally excludes specials/OVA/OP/ED/trailer
+entries, because they have no safe shared numbering scheme. The AniList stage
+does index their relation, title, release dates, and known episode count as
+`relatedSpecials`; it does not force them into the regular-episode list.
 
 ## The resolver
 
@@ -76,8 +78,11 @@ Once on, three independent lanes:
    and updates `mapping`. Knows exactly which anidb_ids are new since last
    time.
 2. **Every `PROVIDER_SYNC_HOURS`** -- runs one ordered pipeline for each
-   new or airing AniDB record: TVDB when it has a TVDB ID, otherwise TMDB
-   when it has a TMDB ID, then remote ani.zip every time. The final stage
+   new or airing AniDB record: AniList first when mapped, TVDB when it has a
+   TVDB ID, otherwise TMDB when it has a TMDB ID, then remote ani.zip every
+   time. AniList validates known episode totals and airing/release dates, and
+   records related seasons, OVAs, ONAs and specials without auto-merging
+   them. The final stage
    supplies localized titles, direct episode mappings, artwork, and mapping
    gap fills. If neither provider ID exists, only the ani.zip stage runs,
    using the AniDB ID as the fallback lookup. `PROVIDER_FULL_SYNC_HOURS`
@@ -93,7 +98,7 @@ Two queues, `src/scheduler/queue.ts`:
 
 - **`jsonQueue`** -- local archive plus the four remote mapping sources. No external rate limit;
   exists so two of them can't write to the DB at once.
-- **`providerQueue`** -- the ordered TVDB → TMDB fallback → ani.zip pass.
+- **`providerQueue`** -- the ordered AniList → TVDB/TMDB fallback → ani.zip pass.
   One sequential queue makes the full and incremental behavior identical,
   resumable, and rate-limited through `INDEX_DELAY`.
 
@@ -139,10 +144,17 @@ the public schema. TMDB has equivalent full-payload caching in
 data. `merge.ts` uses TVDB as its preferred metadata/episode source,
 falls back to TMDB, and returns provenance-preserving artwork from both.
 
-**Still open:** episode data for titles with neither a TVDB nor TMDB
-mapping. Specials/OVA/OP/ED/trailer episodes also aren't mappable even for titles
-with TVDB coverage -- see "Why no live AniDB API access" above; not
-supported for v1.
+AniList is queried through its GraphQL `Media` endpoint for the mapped ID.
+The indexer stores the full normalized record in `anilist_cache`, including
+episode count, status, dates, next airing event, localized names, and direct
+relations. `anime_segment` then keeps a direct mapping at confidence 100;
+related entries remain separate candidates with no inferred episode range.
+This makes a combined franchise reviewable and prevents count/date heuristics
+from incorrectly appending a sequel or special to the main episode list.
+
+For titles with neither a TVDB nor TMDB mapping, ani.zip provides the
+episode fallback. Related specials are indexed as references but still do
+not receive fabricated regular-episode positions.
 
 ## Testing
 
@@ -155,6 +167,7 @@ npx tsx test/tvdb-client.test.ts         # login/token caching, pagination, 401-
 npx tsx test/tmdb-client.test.ts         # TMDB full payload, artwork and season/absolute episode normalization (mocked fetch)
 npx tsx test/ani-zip.test.ts             # local archive normalization and lossless raw record handling
 npx tsx test/ani-zip-client.test.ts      # remote multilingual titles, mappings, episode data, and artwork normalization
+npx tsx test/anilist-client.test.ts      # GraphQL metadata normalization and conservative relation/special segments
 npx tsx test/queue.test.ts              # JobQueue: FIFO, priority preemption, dedup
 npx tsx test/scheduler.test.ts          # regression test for the setInterval overflow bug
 npx tsx test/sequential-runner.test.ts  # per-id ask/get/index/wait loop timing + resume + yield

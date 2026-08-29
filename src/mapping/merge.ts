@@ -6,6 +6,7 @@ import type { MappingRow } from './xml-parser.js';
 import type { TvdbEpisode, TvdbSeriesData } from './tvdb-client.js';
 import type { TmdbData, TmdbEpisode } from './tmdb-client.js';
 import type { AniZipData, AniZipEpisode } from './ani-zip-client.js';
+import type { AniListMedia } from './anilist-client.js';
 import { uniqueArtworks } from './artworks.js';
 
 type MappingDbRow = InferSelectModel<typeof schema.mapping>;
@@ -173,10 +174,16 @@ async function cacheFor(row: MappingDbRow) {
   ];
   const tmdb = await Promise.all(tmdbKeys.map((cacheKey) => db.query.tmdbCache.findFirst({ where: eq(schema.tmdbCache.cacheKey, cacheKey) })));
   const aniZip = await db.query.aniZipCache.findFirst({ where: eq(schema.aniZipCache.anidbId, row.anidbId) });
+  const anilist = row.anilistId
+    ? await db.query.anilistCache.findFirst({ where: eq(schema.anilistCache.anilistId, row.anilistId) })
+    : undefined;
+  const segments = await db.query.animeSegment.findMany({ where: eq(schema.animeSegment.anidbId, row.anidbId) });
   return {
     tvdb: (tvdb?.rawData ?? null) as TvdbSeriesData | null,
     tmdb: tmdb.filter((entry): entry is NonNullable<typeof entry> => Boolean(entry?.rawData)).map((entry) => entry.rawData as TmdbData),
-    aniZip: (aniZip?.apiData ?? null) as AniZipData | null
+    aniZip: (aniZip?.apiData ?? null) as AniZipData | null,
+    anilist: (anilist?.rawData ?? null) as AniListMedia | null,
+    segments
   };
 }
 
@@ -188,7 +195,8 @@ export async function remergeAnime(anidbId: number, freshTvdb?: TvdbSeriesData):
   const tvdb = freshTvdb ?? cached.tvdb;
   const tmdb = cached.tmdb.find((entry) => entry.mediaType === 'tv') ?? cached.tmdb[0] ?? null;
   const aniZip = cached.aniZip;
-  if (!tvdb && !tmdb && !aniZip) return;
+  const anilist = cached.anilist;
+  if (!tvdb && !tmdb && !aniZip && !anilist) return;
 
   const resolverRow = toResolverRow(row);
   // TVDB wins for metadata/episodes where it exists. TMDB is a true
@@ -201,20 +209,61 @@ export async function remergeAnime(anidbId: number, freshTvdb?: TvdbSeriesData):
     : tmdb
       ? buildTmdbEpisodes(resolverRow, tmdb.episodes)
       : buildAniZipEpisodes(aniZip?.episodes ?? []);
+  const episodes = enrichEpisodes(limitToAiredProgress(row, providerEpisodes), aniZip);
+  const expectedEpisodeCount = anilist?.episodes ?? null;
+  const episodeCountStatus = expectedEpisodeCount === null
+    ? 'unknown'
+    : episodes.length === expectedEpisodeCount
+      ? 'match'
+      : episodes.length < expectedEpisodeCount
+        ? 'partial'
+        : 'provider-extra';
+  const relatedSpecials = cached.segments
+    .filter((segment) => ['OVA', 'ONA', 'SPECIAL'].includes(segment.format ?? ''))
+    .map((segment) => ({
+      anilistId: segment.anilistId,
+      relationType: segment.relationType,
+      format: segment.format,
+      title: segment.title,
+      startDate: segment.startDate,
+      endDate: segment.endDate,
+      episodeCount: segment.episodeEnd,
+      confidence: segment.confidence
+    }));
   const data = {
     ...buildMappingResponse(row),
     title: aniZip?.titles.en ?? aniZip?.titles['x-jat'] ?? aniZip?.titles.ja ?? row.title,
     titles: aniZip?.titles ?? {},
     description: primary?.overview ?? null,
     image: primary?.image ?? fallbackImage,
-    episodes: enrichEpisodes(limitToAiredProgress(row, providerEpisodes), aniZip),
+    episodes,
     episodeCount: row.airing && row.episodeProgress !== null ? Math.min(aniZip?.episodeCount ?? row.episodeProgress, row.episodeProgress) : aniZip?.episodeCount ?? null,
     specialCount: aniZip?.specialCount ?? null,
     artworks: uniqueArtworks([...(tvdb?.artworks ?? []), ...cached.tmdb.flatMap((entry) => entry.artworks ?? []), ...(aniZip?.artworks ?? [])]),
+    anilist: anilist
+      ? {
+          id: anilist.id,
+          malId: anilist.idMal,
+          title: anilist.title,
+          synonyms: anilist.synonyms,
+          format: anilist.format,
+          status: anilist.status,
+          episodes: anilist.episodes,
+          duration: anilist.duration,
+          startDate: anilist.startDate,
+          endDate: anilist.endDate,
+          nextAiringEpisode: anilist.nextAiringEpisode,
+          siteUrl: anilist.siteUrl,
+          relations: anilist.relations,
+          validation: { expectedEpisodeCount, indexedEpisodeCount: episodes.length, episodeCountStatus }
+        }
+      : null,
+    relatedSpecials,
     providers: {
       tvdb: tvdb ? { id: row.tvdbId, status: tvdb.status, cached: true } : null,
       tmdb: tmdb ? { id: tmdb.id, mediaType: tmdb.mediaType, status: tmdb.status, cached: true } : null,
-      aniZip: aniZip ? { cached: true, url: aniZip.sourceUrl, episodeCount: aniZip.episodeCount, specialCount: aniZip.specialCount } : null
+      aniZip: aniZip ? { cached: true, url: aniZip.sourceUrl, episodeCount: aniZip.episodeCount, specialCount: aniZip.specialCount } : null,
+      anilist: anilist ? { id: anilist.id, status: anilist.status, cached: true } : null
     }
   };
 

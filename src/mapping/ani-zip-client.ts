@@ -141,10 +141,24 @@ export function normalizeAniZipApiData(raw: unknown, sourceUrl = Config.aniZip.a
   };
 }
 
+/**
+ * api.ani.zip currently returns a JSON-encoded string for some responses.
+ * Accept both that transport shape and a regular JSON object before
+ * normalization, while retaining the complete provider payload.
+ */
+export function decodeAniZipPayload(payload: unknown): unknown {
+  if (typeof payload !== 'string') return payload;
+  try {
+    return JSON.parse(payload) as unknown;
+  } catch {
+    throw new Error('ani.zip returned a string that is not valid JSON');
+  }
+}
+
 export async function fetchAniZip(target: AniZipTarget): Promise<AniZipData> {
   const url = new URL('/mappings', Config.aniZip.apiUrl);
   url.searchParams.set(target.lookup, String(target.value));
   const res = await fetchWithHeaders(url.toString());
   if (!res.ok) throw new Error(`ani.zip GET ${url.pathname}?${url.searchParams} failed: HTTP ${res.status} ${await res.text()}`);
-  return normalizeAniZipApiData(await res.json(), url.toString());
+  return normalizeAniZipApiData(decodeAniZipPayload(await res.json()), url.toString());
 }

@@ -1,0 +1,200 @@
+:root { --header-box-height: 40px; }
+
+/* A shared 40px rhythm gives the Zenshin-style header a single clean baseline. */
+.topbar { height: 68px; grid-template-columns: 225px 1fr minmax(330px, 440px); }
+.brand { width: 205px; height: 66px; overflow: hidden; justify-content: flex-start; }
+.brand img { width: 220px; height: 124px; max-width: none; object-fit: contain; transform: translateX(-8px); }
+.nav-item, .icon-button, .search-control { height: var(--header-box-height); }
+.nav-item { display: inline-grid; place-items: center; }
+.icon-button { display: inline-grid; place-items: center; min-width: var(--header-box-height); padding: 0 10px; }
+.search-control { padding-top: 0; padding-bottom: 0; }
+.github-link { text-decoration: none; }
+.github-link svg { width: 17px; height: 17px; fill: currentColor; }
+.anilist-auth { height: var(--header-box-height); display: inline-flex; align-items: center; gap: 7px; max-width: 150px; overflow: hidden; border: 1px solid #45454d; padding: 0 10px; background: #29292d; color: #d7d5dc; font: 500 .66rem var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+.anilist-auth:hover { border-color: #8b7cff; color: #fff; }.anilist-auth.is-connected { border-color: #6259a7; background: #242236; }.anilist-auth img { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; }
+.site-footer { margin-top: 72px; border-top: 1px solid #303036; background: #101012; }.footer-inner { width: min(1440px, calc(100% - 64px)); min-height: 72px; display: flex; align-items: center; gap: 22px; margin: 0 auto; color: #818089; font: .62rem var(--mono); }.footer-brand { display: flex; align-items: center; gap: 10px; color: #b6b4bd; }.footer-brand img { width: 58px; height: 42px; object-fit: contain; }.footer-inner > p { margin: 0; flex: 1; }.footer-github { display: inline-flex; align-items: center; gap: 7px; color: #b7b5be; text-decoration: none; transition: color .18s ease; }.footer-github:hover { color: #fff; }.footer-github svg { width: 15px; height: 15px; fill: currentColor; }
+.view { min-height: calc(100vh - 68px); }
+
+/* The large source SVG has a 16:9 canvas.  These dimensions intentionally crop its empty
+   top/bottom canvas space while keeping the actual mark large and sharp. */
+.landing-copy { max-width: 660px; }
+.landing-logo { width: min(620px, 90vw); height: 220px; max-width: none; object-fit: contain; }
+
+/* Home hero copy moves and fades on scroll, matching Zenshin's layered type treatment. */
+.landing-hero { --hero-progress: 0; }
+.hero-words { opacity: calc(1 - var(--hero-progress)); transition: opacity .08s linear; }
+.hero-words-top { transform: translateY(calc(var(--hero-progress) * -110px)); }
+.hero-words-middle { transform: translateY(calc(var(--hero-progress) * -35px)); }
+.hero-words-bottom { transform: translateY(calc(var(--hero-progress) * 110px)); }
+.landing-copy { transform: translateY(calc(var(--hero-progress) * -22px)); opacity: calc(1 - (var(--hero-progress) * .45)); }
+.activity-panel { transform: translateY(calc(var(--hero-progress) * 130px)); opacity: calc(1 - (var(--hero-progress) * .42)); }
+.feature-enter { animation: feature-arrive .58s cubic-bezier(.16, 1, .3, 1) both; }
+.feature-enter .feature-info { animation: feature-copy .68s cubic-bezier(.16, 1, .3, 1) .08s both; }
+@keyframes feature-arrive { from { opacity: 0; transform: scale(1.016); } to { opacity: 1; transform: scale(1); } }
+@keyframes feature-copy { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Zenshin-inspired title hover detail card. */
+.anime-hover-card { position: fixed; z-index: 90; width: 310px; overflow: hidden; border: 1px solid #56565e; background: #1a1a1d; box-shadow: 0 24px 58px #000000b8; opacity: 0; pointer-events: none; transform: translateY(8px) scale(.985); transition: opacity .13s ease, transform .13s ease; }
+.anime-hover-card.is-visible { opacity: 1; pointer-events: auto; transform: translateY(0) scale(1); }
+.hover-art { position: relative; height: 140px; overflow: hidden; background: #24242a; }
+.hover-art::after { content: ''; position: absolute; inset: 0; background: linear-gradient(0deg, #1a1a1d 0%, transparent 65%); }
+.hover-art img { width: 100%; height: 100%; object-fit: cover; }
+.hover-art span { position: absolute; z-index: 1; top: 10px; right: 10px; padding: 4px 6px; border: 1px solid #ffffff55; background: #00000094; color: #f2f1f5; font: .59rem var(--mono); }
+.hover-content { padding: 0 12px 12px; }
+.hover-content h3 { margin: -8px 0 3px; position: relative; z-index: 2; max-width: 250px; color: #fff; font: 500 .87rem/1.35 var(--mono); }
+.hover-native { overflow: hidden; margin: 0 0 10px; color: var(--muted); font: .62rem var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+.hover-stats { display: grid; grid-template-columns: repeat(4, 1fr); margin-bottom: 9px; border-top: 1px solid #49494f; border-bottom: 1px solid #49494f; }
+.hover-stats span { overflow: hidden; padding: 6px 4px; border-right: 1px solid #49494f; color: #d7d6da; font: .56rem var(--mono); text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+.hover-stats span:last-child { border: 0; }
+.hover-genres, .hover-airing { margin: 0 0 8px; color: #c5c2e6; font: .59rem/1.45 var(--mono); }
+.hover-description { display: -webkit-box; overflow: hidden; margin: 0 0 10px; color: #c3c2c7; font: .62rem/1.55 var(--mono); -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+.hover-airing { color: #a89ffc; }
+.hover-open { width: 100%; border: 1px solid #59525d; padding: 8px; background: #28262d; color: #eeeafd; font: .63rem var(--mono); text-align: left; }
+.hover-open:hover { border-color: var(--accent); background: #39334e; }
+
+@media (max-width: 900px) { .topbar { height: 64px; grid-template-columns: 155px 1fr auto; }.brand { width: 145px; height: 62px; }.brand img { width: 170px; height: 96px; transform: translateX(-5px); }.view { min-height: calc(100vh - 64px); } }
+@media (max-width: 620px) { .topbar { grid-template-columns: 145px 1fr; }.brand { width: 135px; }.brand img { width: 160px; height: 90px; }.github-link { display: none; }.landing-logo { height: 170px; width: min(480px, 104vw); }.activity-panel { transform: none; opacity: 1; }.hero-words { opacity: .72; } }
+
+/* Replace the static airing list with the same kind of clipped, drifting card columns
+   that Zenshin uses for recent activity in its hero. */
+.landing-hero { gap: clamp(38px, 7vw, 130px); }
+.landing-logo { width: min(760px, 100vw); height: 290px; transform: scale(1.2); }
+.landing-copy p, .landing-actions { position: relative; z-index: 2; }
+.activity-panel { position: relative; right: auto; bottom: auto; width: 485px; height: 500px; overflow: hidden; border: 0; background: transparent; box-shadow: none; backdrop-filter: none; mask-image: linear-gradient(to bottom, transparent, #000 12%, #000 88%, transparent); -webkit-mask-image: linear-gradient(to bottom, transparent, #000 12%, #000 88%, transparent); }
+.airing-list { position: relative; width: 100%; height: 100%; max-height: none; overflow: hidden; }
+.activity-lane { position: absolute; width: 220px; will-change: transform; }
+.activity-lane-left { left: 8px; top: -405px; animation: lane-up 26s linear infinite; }
+.activity-lane-right { left: 256px; top: -730px; animation: lane-down 31s linear infinite; }
+.activity-tile { position: relative; width: 210px; height: 182px; margin: 18px 0; overflow: hidden; cursor: pointer; transform: matrix(1, 0, -.055, 1, 0, 0); border: 1px solid #4b4b54; background: #1a1a1f; box-shadow: 0 12px 25px #00000050; transition: transform .2s ease, border-color .2s ease; }
+.activity-tile:hover { z-index: 2; border-color: #988ef1; transform: matrix(1, 0, -.055, 1, 0, 0) scale(1.04); }
+.activity-tile > img { width: 100%; height: 100%; object-fit: cover; opacity: .84; }
+.activity-tile::after { content: ''; position: absolute; inset: 32% 0 0; background: linear-gradient(transparent, #111113f5 85%); }
+.activity-tile-copy { position: absolute; z-index: 1; right: 0; bottom: 0; left: 0; padding: 10px; }
+.activity-tile-copy strong { display: block; overflow: hidden; color: #fff; font: 500 .66rem/1.4 var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+.activity-tile-copy span, .activity-tile-copy small { display: block; margin-top: 4px; color: #b9b7c0; font: .58rem var(--mono); }
+.activity-tile-copy small { color: #9895a4; }
+@keyframes lane-up { from { transform: translateY(0); } to { transform: translateY(-600px); } }
+@keyframes lane-down { from { transform: translateY(-530px); } to { transform: translateY(0); } }
+.reduced-motion .activity-lane { animation-play-state: paused; }
+
+/* Zenshin glow: the blur is a second instance of the title's own artwork, never a flat colour. */
+.feature-shell { position: relative; isolation: isolate; padding: 14px 10px 20px; overflow: visible; }
+.feature-glow { position: absolute; z-index: -1; inset: 20px 28px 2px; width: calc(100% - 56px); height: calc(100% - 16px); object-fit: cover; opacity: .64; filter: blur(34px) brightness(.68) saturate(1.65); transform: scale(1.025); transition: opacity .28s ease; }
+.feature-shell .feature { position: relative; }
+.anime-card-art { position: relative; isolation: isolate; padding: 0 2px 8px; }
+.card-glow { position: absolute; z-index: -1; inset: 12px 8px 0; width: calc(100% - 16px); height: calc(100% - 8px); object-fit: cover; opacity: 0; filter: blur(20px) brightness(.72) saturate(1.8); transition: opacity .32s ease, transform .32s ease; transform: scale(.9); }
+.anime-card:hover .card-glow, .anime-card:focus-within .card-glow { opacity: .72; transform: scale(1.04); }
+.detail-hero { position: relative; isolation: isolate; padding: 18px 24px 30px; overflow: hidden; }
+.detail-banner-glow { position: absolute; z-index: -1; inset: 36px 7% 10px; width: 86%; height: 94%; object-fit: cover; opacity: .7; filter: blur(42px) brightness(.64) saturate(1.6); transform: scale(1.04); }
+.detail-hero .detail-banner { position: relative; }
+.no-glow .feature-glow, .no-glow .card-glow, .no-glow .detail-banner-glow { opacity: 0 !important; }
+.no-glow .anime-card:hover .anime-poster { box-shadow: 0 12px 26px #00000055; }
+.detail-fact { margin: 0 0 10px; color: #b9b7c0; font: .65rem/1.5 var(--mono); text-transform: capitalize; }
+.detail-fact b { display: inline-block; min-width: 58px; color: #e1dff0; font-weight: 500; }
+.anilist-progress { display: flex; width: fit-content; gap: 14px; margin: 0 0 13px; border: 1px solid #615aa3; padding: 6px 8px; color: #c4c0ef; font: .63rem var(--mono); }.anilist-progress strong { color: #fff; font-weight: 500; }
+.mark-watched { margin-left: auto; border: 1px solid #756cd1; padding: 5px 7px; background: #332e5a; color: #eeeafd; font: .59rem var(--mono); }.mark-watched:hover { background: #49417f; }.mark-watched:disabled { opacity: .65; cursor: wait; }
+.anilist-user { display: flex; align-items: center; gap: 11px; }.anilist-user img { width: 42px; height: 42px; border-radius: 50%; object-fit: cover; }
+.episode-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.episode-button { min-height: 50px; display: flex; align-items: center; gap: 9px; padding: 6px 8px; text-align: left; }
+.episode-button b { display: grid; flex: 0 0 27px; width: 27px; height: 27px; place-items: center; border: 1px solid #53535b; color: #c7c5cc; font: 500 .61rem var(--mono); }
+.episode-button span { display: -webkit-box; overflow: hidden; color: inherit; font: .59rem/1.35 var(--mono); -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.episode-button.is-active b { border-color: #fff8; }
+.relations-section { margin: 42px 0 0; border-top: 1px solid var(--line); padding-top: 25px; }
+.relations-heading { margin-bottom: 14px; }.relations-heading .eyebrow { margin-bottom: 5px; }.relations-heading h2 { font: 500 1rem var(--mono); letter-spacing: 0; }
+.relations-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
+.relation-card { display: flex; min-width: 0; border: 1px solid #414149; background: #1c1c20; cursor: pointer; transition: border-color .18s ease, background .18s ease; }
+.relation-card:hover { border-color: #8e84e5; background: #25232d; }.relation-card img { width: 53px; height: 73px; object-fit: cover; }
+.relation-card > div { min-width: 0; padding: 8px; }.relation-card span, .relation-card small { display: block; color: #a79fea; font: .55rem var(--mono); text-transform: capitalize; }
+.relation-card strong { display: -webkit-box; overflow: hidden; margin: 5px 0; color: #e4e3e8; font: 500 .62rem/1.35 var(--mono); -webkit-box-orient: vertical; -webkit-line-clamp: 2; }.relation-card small { color: #8d8c94; }
+
+@media (max-width: 1050px) { .landing-hero { gap: 24px; }.activity-panel { width: 410px; transform: translateY(calc(var(--hero-progress) * 95px)); }.activity-lane-right { left: 210px; }.activity-tile { width: 188px; height: 163px; } }
+@media (max-width: 900px) { .landing-logo { width: min(630px, 105vw); height: 230px; transform: scale(1.14); }.activity-panel { width: 420px; height: 420px; } }
+@media (max-width: 700px) { .landing-logo { height: 195px; transform: scale(1.1); }.activity-panel { width: min(430px, 92vw); height: 285px; margin: 18px 0 0; }.activity-lane-left { left: 20px; top: -435px; }.activity-lane-right { left: 205px; top: -500px; }.activity-tile { width: 165px; height: 142px; margin: 13px 0; } }
+@media (max-width: 620px) { .detail-hero { padding: 12px 0 24px; }.detail-banner-glow { inset: 22px 8% 5px; }.episode-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 620px) { .anilist-auth { width: var(--header-box-height); min-width: var(--header-box-height); padding: 0; justify-content: center; font-size: 0; }.anilist-auth::before { content: 'A'; font: 500 .75rem var(--mono); }.anilist-auth img { display: none; } }
+@media (max-width: 620px) { .site-footer { margin-top: 48px; }.footer-inner { width: min(100% - 32px, 1440px); min-height: 88px; gap: 12px; }.footer-brand span { display: none; }.footer-inner > p { font-size: .56rem; }.footer-brand img { width: 54px; } }
+
+/* Match Zenshin's actual home composition: a centred 2/5 brand column and two
+   30rem-high portrait activity columns that move in opposite directions on scroll. */
+@media (min-width: 1051px) {
+  .landing-hero { display: flex; justify-content: center; align-items: center; gap: 96px; padding: 0 48px; }
+  .landing-copy { flex: 0 0 40%; display: flex; flex-direction: column; align-items: center; }
+  .landing-logo { width: 760px; max-width: 128%; height: 260px; transform: scale(1.46); transform-origin: center; }
+  .activity-panel { flex: 0 0 480px; width: 480px; height: 480px; margin: 0; }
+}
+.activity-panel { mask-image: linear-gradient(to bottom, transparent 0%, #000 9%, #000 91%, transparent 100%); -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 9%, #000 91%, transparent 100%); }
+.activity-panel { transform: none; opacity: 1; }
+.activity-lane { width: 224px; animation: none; }
+.activity-lane-left { left: 0; top: -256px; transform: translateY(calc(var(--hero-progress) * -360px)); }
+.activity-lane-right { left: 240px; top: -400px; transform: translateY(calc(var(--hero-progress) * 360px)); }
+.activity-tile { width: 224px; height: 288px; margin: 24px 0; transform: matrix(1, 0, -.05, 1, 0, 0); }
+.activity-tile:hover { transform: matrix(1, 0, -.05, 1, 0, 0) scale(1.04); }
+.activity-tile-copy { padding: 10px 11px; }.activity-tile-copy strong { font-size: .68rem; }.activity-tile-copy span,.activity-tile-copy small { font-size: .59rem; }
+
+@media (max-width: 1050px) { .activity-panel { width: 480px; height: 480px; }.activity-lane-left { left: 0; }.activity-lane-right { left: 240px; }.activity-tile { width: 224px; height: 288px; } }
+@media (max-width: 700px) { .landing-logo { transform: scale(1.17); }.activity-panel { width: min(430px, 92vw); height: 285px; }.activity-lane-left { left: 0; top: -366px; }.activity-lane-right { left: 205px; top: -446px; }.activity-tile { width: 190px; height: 244px; margin: 18px 0; } }
+
+/* Zenshin title-page geometry: wide banner, 25rem poster overlapping it, and compact data panel. */
+#detail-content { width: 100%; }
+#detail-content > .detail-hero { width: 100%; padding: 0 0 30px; overflow: visible; }
+.detail-hero .detail-banner { height: clamp(288px, 25vw, 384px); min-height: 288px; }
+.detail-hero .detail-banner::after { background: linear-gradient(0deg, var(--bg) 0%, #11111330 50%, transparent 100%), linear-gradient(90deg, #11111328, transparent 75%); }
+.detail-banner-glow { inset: 28px 6% 4px; width: 88%; height: calc(100% - 16px); opacity: .76; filter: blur(48px) brightness(.64) saturate(1.65); }
+.detail-layout { width: min(1180px, calc(100% - 64px)); grid-template-columns: 288px minmax(0, 1fr); gap: 28px; margin: -64px auto 0; padding: 0; }
+.detail-poster { position: relative; z-index: 2; width: 288px; height: 400px; aspect-ratio: auto; border-radius: 3px; box-shadow: 0 18px 42px #000000aa; }
+.detail-body { min-height: 336px; padding: 74px 0 0; }
+.detail-romaji { margin: 0; color: #f1f0f4; font: 500 1.25rem/1.35 var(--mono); letter-spacing: .02em; }
+.detail-body h1 { margin: 4px 0 10px; padding-bottom: 10px; border-bottom: 1px solid #54545b; color: #ceccd3; font: 500 .78rem/1.5 var(--mono); letter-spacing: .04em; }
+.detail-subtitle { min-height: 0; margin: 0 0 10px; padding-bottom: 10px; border-bottom: 1px solid #45454d; color: #a8a6ae; font: .7rem var(--mono); }
+.metadata { gap: 0; width: fit-content; max-width: 100%; margin: 0 0 10px; padding: 0 0 10px; border-bottom: 1px solid #45454d; }
+.metadata span { border: 0; border-right: 1px solid #3c3c43; padding: 0 9px; color: #d0ced4; font: .62rem var(--mono); }.metadata span:first-child { padding-left: 0; }.metadata span:last-child { border: 0; }
+.detail-fact { margin: 0 0 6px; color: #aaa8af; font-size: .63rem; }.detail-fact b { min-width: 53px; color: #e0dfe5; }
+.genre-list { margin: 9px 0; padding-bottom: 9px; border-bottom: 1px solid #45454d; }.genre { border: 0; padding: 0; color: #d0ccef; font-size: .62rem; }.genre:not(:last-child)::after { content: ' •'; color: #686671; }
+.description { max-width: 790px; max-height: 122px; overflow: auto; padding-right: 8px; color: #a9a8ae; font: .69rem/1.75 var(--mono); }
+.external-links { margin-top: 14px; }.external-links a { border: 0; padding: 0; color: #bcb8ef; font-size: .63rem; }.external-links a:not(:last-child)::after { content: ' /'; padding: 0 7px; color: #66646d; }
+.anilist-progress { margin: 0 0 9px; border-color: #4f4b75; padding: 4px 6px; font-size: .58rem; }
+
+/* Player is the first section after the detail header; the episode browser follows below it. */
+.watch-area { width: min(1180px, calc(100% - 64px)); margin: 12px auto 70px; border-top: 1px solid #45454d; padding-top: 22px; }
+.watch-area .player-card { display: block; margin: 0 0 22px; border-color: #55555e; }.watch-area .player-toolbar { min-height: 38px; padding: 9px 12px; }
+.player-placeholder { display: grid; place-content: center; min-height: min(56vw, 620px); aspect-ratio: 16 / 9; background: radial-gradient(circle at center, #24242c, #080809 65%); color: #b9b6c8; text-align: center; }.player-placeholder span { display: grid; width: 42px; height: 42px; place-items: center; margin: 0 auto 12px; border: 1px solid #6e68a7; border-radius: 50%; color: #a89fff; }.player-placeholder p { margin: 0 0 5px; color: #eeecf3; font: 500 .78rem var(--mono); }.player-placeholder small { color: #89878f; font: .62rem var(--mono); }
+.watch-header { align-items: center; margin-bottom: 12px; }.watch-header h2 { font: 500 1rem var(--mono); }.episode-toolbar { padding: 9px 0; border-top: 1px solid #3e3e45; border-bottom: 1px solid #3e3e45; }.episode-grid { grid-template-columns: 1fr; gap: 5px; margin-top: 12px; }.episode-button { min-height: 50px; border-color: #44444b; background: #1d1d21; }.episode-button:hover { border-color: #7670a8; background: #262431; }.episode-button.is-active { background: #393365; border-color: #8b7cff; }.player-note { display: none; }
+.relations-section { width: min(1180px, calc(100% - 64px)); margin: 0 auto 80px; }
+
+/* Home activity cards are intentionally fixed portrait cards like Zenshin's RecentActivityCard.
+   They open on click but never attach Ryuu's hover-detail card behavior. */
+.activity-panel { width: 480px; height: 480px; }
+.activity-lane { width: 192px; }.activity-lane-left { left: 14px; top: -282px; }.activity-lane-right { left: 258px; top: -420px; }
+.activity-tile { width: 192px; height: 288px; margin: 24px 0; border-radius: 0; transform: matrix(1, 0, -.05, 1, 0, 0); }.activity-tile:hover { transform: matrix(1, 0, -.05, 1, 0, 0) scale(1.02); }
+.activity-tile-copy { padding: 9px; }.activity-tile-copy strong { font-size: .62rem; }.activity-tile-copy span,.activity-tile-copy small { font-size: .55rem; }
+
+@media (max-width: 760px) { .detail-layout,.watch-area,.relations-section { width: min(100% - 32px, 1180px); }.detail-layout { grid-template-columns: 135px minmax(0, 1fr); gap: 16px; margin-top: -42px; }.detail-poster { width: 135px; height: 195px; }.detail-body { min-height: 195px; padding-top: 46px; }.detail-romaji { font-size: .9rem; }.detail-body h1 { font-size: .62rem; }.description { grid-column: 1 / -1; margin-left: -151px; max-height: 132px; }.external-links { grid-column: 1 / -1; margin-left: -151px; }.detail-hero .detail-banner { height: 225px; min-height: 225px; }.watch-area { margin-top: 26px; }.watch-controls { flex-wrap: wrap; }.player-placeholder { min-height: 200px; }.relations-grid { grid-template-columns: 1fr; } }
+
+/* Dedicated title and watch episode lists: metadata comes from the AniZip-compatible mapper,
+   while every missing field has a predictable visual fallback. */
+.episode-list-section, .watch-page { width: min(1180px, calc(100% - 64px)); margin: 34px auto 72px; border-top: 1px solid #45454d; padding-top: 22px; }
+.watch-page { margin-top: 12px; }
+.episode-list-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
+.episode-list-header h2 { margin: 0; color: #e6e4eb; font: 500 1rem var(--mono); }
+.episode-list-header p { margin: 4px 0 0; color: #8d8b94; font: .6rem/1.45 var(--mono); }
+.episode-list-header .button { flex: 0 0 auto; }
+.episode-list-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-top: 1px solid #3e3e45; border-bottom: 1px solid #3e3e45; padding: 9px 0; }
+.episode-list-toolbar p { margin: 0; color: #9c9aa3; font: .6rem var(--mono); }
+.episode-list-toolbar .episode-filter { flex: 0 1 230px; }
+.episode-list { display: grid; grid-template-columns: 1fr; gap: 7px; margin-top: 13px; }
+.episode-row { display: grid; grid-template-columns: 154px minmax(0, 1fr) auto; min-height: 86px; overflow: hidden; border: 1px solid #424249; padding: 0; background: #1a1a1e; color: #d9d7df; text-align: left; transition: border-color .16s ease, background .16s ease, transform .16s ease; }
+button.episode-row { cursor: pointer; }
+button.episode-row:hover, .episode-row.is-active { border-color: #867bd4; background: #24222d; }
+button.episode-row:hover { transform: translateX(2px); }
+.episode-row-image { width: 154px; height: 86px; object-fit: cover; background: #24242a; opacity: .84; }
+.episode-row-copy { min-width: 0; padding: 11px 14px; }
+.episode-row-title { display: flex; align-items: center; gap: 8px; color: #eceaf1; font: 500 .7rem/1.4 var(--mono); }
+.episode-row-number { color: #ada6f0; white-space: nowrap; }
+.episode-row-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.episode-row-overview { display: -webkit-box; overflow: hidden; margin: 5px 0 0; color: #9e9ca5; font: .59rem/1.45 var(--mono); -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.episode-row-date { align-self: center; margin-right: 14px; color: #8e8b96; font: .57rem var(--mono); white-space: nowrap; }
+.episode-row.is-fallback .episode-row-name { color: #b6b4bd; }
+.watch-page .player-card { display: block; margin: 0 0 24px; border-color: #55555e; }
+.watch-page .player-frame { width: 100%; aspect-ratio: 16 / 9; }
+.watch-page .watch-header { margin-bottom: 12px; }
+@media (max-width: 760px) { .episode-list-section, .watch-page { width: min(100% - 32px, 1180px); }.episode-list-toolbar { align-items: stretch; flex-direction: column; }.episode-list-toolbar .episode-filter { width: 100%; max-width: none; }.episode-row { grid-template-columns: 112px minmax(0, 1fr); min-height: 76px; }.episode-row-image { width: 112px; height: 76px; }.episode-row-copy { padding: 8px 10px; }.episode-row-date { display: none; }.episode-list-header { align-items: flex-start; }.episode-list-header .button { padding: 8px; } }

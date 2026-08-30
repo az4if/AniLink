@@ -1,6 +1,6 @@
 import { arrayContains, eq, or, type InferSelectModel } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
-import { reverseResolveRegular } from './resolver.js';
+import { reverseResolveRegular, type Provider } from './resolver.js';
 import { buildMappingResponse } from './response.js';
 import type { MappingRow } from './xml-parser.js';
 import type { TvdbEpisode, TvdbSeriesData } from './tvdb-client.js';
@@ -66,11 +66,44 @@ export type MergedEpisode = {
  * Exported (rather than folded into mergeTvdbIntoAnime) so it's directly
  * unit-testable without a live DB -- see test/merge.test.ts.
  */
+/**
+ * Resolves an episode's canonical (AniDB-regular-style) number for either
+ * TVDB or TMDB, honoring the same priority the forward resolver documents:
+ * mapping-list overrides > absolute numbering. This matters for shows like
+ * Rizelmine (anidb_id 19) that use absolute numbering by default BUT have
+ * explicit mapping-list ranges for part of their run -- those explicit
+ * ranges are curated, authoritative data and must win over TVDB/TMDB's own
+ * absoluteNumber field, not the other way around.
+ *
+ * Also guards against a real bug this fixed: for absolute-numbered shows,
+ * `ep.absoluteNumber` is only meaningful for the main numbered sequence.
+ * TVDB/TMDB routinely set it to 0 (or leave it null) for season-0 content
+ * (specials, OVAs, movies bundled under the same series id) since those
+ * were never part of the absolute count to begin with -- using it blindly
+ * leaked specials/OVAs/movies into the exposed episode list, all
+ * colliding on canonical number 0.
+ */
+function resolveCanonicalNumber(
+  row: MappingRow,
+  ep: { seasonNumber: number; number: number; absoluteNumber: number | null },
+  target: Provider
+): number | null {
+  const viaMappingList = reverseResolveRegular(row, { season: ep.seasonNumber, number: ep.number }, target);
+  if (viaMappingList !== null) return viaMappingList;
+
+  const usesAbsolute = target === 'tvdb' ? row.tvdbAbsolute : row.tmdbAbsolute;
+  if (usesAbsolute && ep.seasonNumber !== 0 && ep.absoluteNumber !== null && ep.absoluteNumber > 0) {
+    return ep.absoluteNumber;
+  }
+
+  return null;
+}
+
 export function buildEpisodes(row: MappingRow, episodes: TvdbEpisode[]): MergedEpisode[] {
   const out: MergedEpisode[] = [];
 
   for (const ep of episodes) {
-    const number = row.tvdbAbsolute ? ep.absoluteNumber : reverseResolveRegular(row, { season: ep.seasonNumber, number: ep.number }, 'tvdb');
+    const number = resolveCanonicalNumber(row, { seasonNumber: ep.seasonNumber, number: ep.number, absoluteNumber: ep.absoluteNumber }, 'tvdb');
     if (number === null || number === undefined) continue;
 
     out.push({
@@ -141,12 +174,29 @@ export function limitToAiredProgress(row: Pick<MappingDbRow, 'airing' | 'episode
   return episodes.filter((episode) => episode.number <= row.episodeProgress!);
 }
 
+/**
+ * Defense-in-depth, independent of resolveCanonicalNumber's own fix: if
+ * AniList reports a known episode count for this title and the resolved
+ * list still somehow has MORE regular episodes than that (a provider
+ * mis-numbering something, a stale mapping-list entry, anything not caught
+ * upstream), drop whatever falls beyond that confirmed count instead of
+ * exposing it. Same "trust the more authoritative bound" approach as
+ * limitToAiredProgress above, just for the finished-show case instead of
+ * the currently-airing one -- the two never conflict, since a title is
+ * only ever covered by one or the other (airing shows usually have no
+ * confirmed AniList total yet; finished shows have no episodeProgress).
+ */
+export function capToExpectedEpisodeCount(expectedEpisodeCount: number | null, episodes: MergedEpisode[]): MergedEpisode[] {
+  if (expectedEpisodeCount === null) return episodes;
+  return episodes.filter((episode) => episode.number <= expectedEpisodeCount);
+}
+
 /** TMDB has no native absolute-number field; tmdb-client derives a stable
  * positive-season absolute order for XML mappings that use it. */
 export function buildTmdbEpisodes(row: MappingRow, episodes: TmdbEpisode[]): MergedEpisode[] {
   const out: MergedEpisode[] = [];
   for (const ep of episodes) {
-    const number = row.tmdbAbsolute ? ep.absoluteNumber : reverseResolveRegular(row, { season: ep.seasonNumber, number: ep.number }, 'tmdb');
+    const number = resolveCanonicalNumber(row, { seasonNumber: ep.seasonNumber, number: ep.number, absoluteNumber: ep.absoluteNumber }, 'tmdb');
     if (number === null || number === undefined) continue;
     out.push({
       number,
@@ -209,8 +259,9 @@ export async function remergeAnime(anidbId: number, freshTvdb?: TvdbSeriesData):
     : tmdb
       ? buildTmdbEpisodes(resolverRow, tmdb.episodes)
       : buildAniZipEpisodes(aniZip?.episodes ?? []);
-  const episodes = enrichEpisodes(limitToAiredProgress(row, providerEpisodes), aniZip);
+  const episodeCountBeforeCap = enrichEpisodes(limitToAiredProgress(row, providerEpisodes), aniZip);
   const expectedEpisodeCount = anilist?.episodes ?? null;
+  const episodes = capToExpectedEpisodeCount(expectedEpisodeCount, episodeCountBeforeCap);
   const episodeCountStatus = expectedEpisodeCount === null
     ? 'unknown'
     : episodes.length === expectedEpisodeCount

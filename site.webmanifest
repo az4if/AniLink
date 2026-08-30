@@ -1,0 +1,51 @@
+{
+  "name": "Ryuu 龍",
+  "short_name": "Ryuu",
+  "description": "Ryuu 龍 — Premium anime streaming experience",
+  "start_url": ".",
+  "scope": ".",
+  "id": ".",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#111113",
+  "background_color": "#111113",
+  "lang": "en",
+  "icons": [
+    {
+      "src": "favicons/favicon-48x48.png",
+      "sizes": "48x48",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "favicons/favicon-96x96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "favicons/android-chrome-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "favicons/android-chrome-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "favicons/android-chrome-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "favicons/android-chrome-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

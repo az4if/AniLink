@@ -1,7 +1,10 @@
 // Mocked-fetch unit tests for tvdb-client.ts. No real network call to TVDB
 // is made or possible here -- this checks the client's OWN logic (token
 // caching/reuse, pagination walking, 401 -> forced re-login -> retry-once,
-// and the English-translation fetch pass) against a fake server.
+// and the English-translation fetch pass) against a fake server. Run with
+// TVDB_API_KEY=test -- the client's own guard clause rejects an empty key
+// before ever reaching the mocked fetch, so this must be set even though
+// no real request happens.
 import { fetchTvdbSeries } from '../src/mapping/tvdb-client.js';
 
 let pass = 0;

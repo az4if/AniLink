@@ -96,6 +96,9 @@ For how this works internally, why it's built this way, and testing, see
 | `CORS_ORIGIN` | `*` | `*` allows any origin. Or a comma-separated allow-list, e.g. `https://domainone.com,https://domaintwo.com`, to restrict to specific origins only. |
 | `RATE_LIMIT` | `100` | Max requests per IP per `RATE_LIMIT_WINDOW_SEC`, applied to every route. `0` disables it (unlimited). |
 | `RATE_LIMIT_WINDOW_SEC` | `60` | Window (seconds) the `RATE_LIMIT` count applies to. |
+| `COMPRESSION` | `true` | Brotli when the client sends `Accept-Encoding: br`, gzip otherwise. `false` disables it (e.g. if a proxy/CDN already compresses). |
+| `COMPRESSION_MIN_BYTES` | `1024` | Responses smaller than this are sent uncompressed. |
+| `BROTLI_QUALITY` | `4` | Brotli quality 0-11. 4 keeps most of the size win at near-gzip speed; 11 is far too slow per request. |
 | `PUBLIC_URL` | *(empty)* | Render keep-alive self-ping target. Blank on localhost. |
 | `RENDER_KEEP_ALIVE` | `false` | `true` only on Render free tier. |
 | `ENABLE_SCHEDULER` | `false` | Turns on the in-process scheduler. |
@@ -190,7 +193,7 @@ finishes for a given title, `description`/`image`/`episodes` are `null`/
     { "source": "ani-zip", "type": "logo", "url": "...", "language": null }
   ],
   "episodes": [
-    { "number": 1, "season": 1, "episode": 1, "absoluteNumber": 1, "title": "Asteroid Blues", "titleEn": "Asteroid Blues", "titles": { "en": "Asteroid Blues", "ja": "アステロイド・ブルース" }, "anidbEpisodeId": 881, "overview": "...", "overviewEn": "...", "aired": "1998-04-03", "image": null }
+    { "number": 1, "season": 1, "episode": 1, "absoluteNumber": 1, "title": "Asteroid Blues", "titleEn": "Asteroid Blues", "titles": { "en": "Asteroid Blues", "ja": "アステロイド・ブルース" }, "anidbEpisodeId": 881, "overview": "...", "overviewEn": "...", "aired": "1998-04-03", "image": "https://artworks.thetvdb.com/banners/episodes/76885/219120.jpg", "imageSource": "tvdb" }
     /* ...and so on */
   ],
   "anilist": {
@@ -211,6 +214,17 @@ are always English specifically (fetched via TVDB's per-episode
 translations endpoint), `null` when no English translation exists for
 that episode at all -- not an error. Specials aren't included -- see
 CONTRIBUTING.md for why.
+
+`episodes[].image` is the episode thumbnail and `episodes[].imageSource`
+says which provider it came from (`tvdb`, `tmdb`, `ani-zip`; `anilist` and
+`kitsu` are reserved for sources not wired up yet). The episode list itself
+always comes from one provider, but if that provider has no thumbnail for an
+episode, the same episode number's thumbnail from the next provider is used
+(order: tvdb, tmdb, ani-zip). If nobody has one, both fields are `null` --
+nothing is invented.
+
+Responses are compressed with Brotli when the client sends
+`Accept-Encoding: br`, otherwise gzip (see `COMPRESSION` below).
 
 `anilist.validation` makes disagreement visible instead of silently joining
 multiple related entries. `relatedSpecials` exposes referenced OVA, ONA, and

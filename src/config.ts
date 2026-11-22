@@ -115,6 +115,15 @@ export const Config = {
     windowMs: Number(process.env.RATE_LIMIT_WINDOW_SEC ?? 60) * 1000
   },
 
+  // Response compression (Brotli when the client accepts it, gzip otherwise).
+  // COMPRESSION=false turns it off, e.g. when a reverse proxy/CDN in front
+  // already compresses. See src/helpers/compress.ts.
+  compression: {
+    enabled: (process.env.COMPRESSION ?? 'true').toLowerCase() !== 'false',
+    minBytes: Number(process.env.COMPRESSION_MIN_BYTES ?? 1024),
+    brotliQuality: Number(process.env.BROTLI_QUALITY ?? 4)
+  },
+
   // In-process scheduler. Off by default -- on a free-tier host that sleeps
   // when idle, an external pinger (cron-job.org) hitting POST /indexer/*
   // is more reliable than a timer inside a process that might not be

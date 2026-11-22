@@ -18,7 +18,7 @@
     "ingest:fribb": "tsx src/mapping/fribb.ts",
     "ingest:lists": "tsx src/mapping/lists.ts",
     "test": "tsx test/resolver.test.ts",
-    "test:unit": "tsx test/conditional-fetch.test.ts && tsx test/sync-guard.test.ts && tsx test/aod.test.ts && tsx test/catalog.test.ts && tsx test/overrides.test.ts"
+    "test:unit": "tsx test/conditional-fetch.test.ts && tsx test/sync-guard.test.ts && tsx test/aod.test.ts && tsx test/catalog.test.ts && tsx test/overrides.test.ts && tsx test/episode-images.test.ts && tsx test/compress.test.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.0",

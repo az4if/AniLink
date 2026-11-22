@@ -8,6 +8,7 @@ import type { TmdbData, TmdbEpisode } from './tmdb-client.js';
 import type { AniZipData, AniZipEpisode } from './ani-zip-client.js';
 import type { AniListMedia } from './anilist-client.js';
 import { uniqueArtworks } from './artworks.js';
+import { fillEpisodeImages, type EpisodeImageCandidate, type EpisodeImageSource } from './episode-images.js';
 
 type MappingDbRow = InferSelectModel<typeof schema.mapping>;
 
@@ -41,6 +42,8 @@ export type MergedEpisode = {
   overviewEn: string | null;
   aired: string | null;
   image: string | null;
+  /** Which provider the thumbnail in `image` came from; null when there is no image. */
+  imageSource?: EpisodeImageSource | null;
   titles?: Record<string, string>;
   anidbEpisodeId?: number | null;
   tvdbEpisodeId?: number | null;
@@ -254,11 +257,20 @@ export async function remergeAnime(anidbId: number, freshTvdb?: TvdbSeriesData):
   // cases so clients can choose their preferred provider.
   const primary = tvdb ?? tmdb;
   const fallbackImage = aniZip?.artworks.find((artwork) => artwork.type === 'poster')?.url ?? aniZip?.artworks[0]?.url ?? null;
-  const providerEpisodes = tvdb
-    ? buildEpisodes(resolverRow, tvdb.episodes)
-    : tmdb
-      ? buildTmdbEpisodes(resolverRow, tmdb.episodes)
-      : buildAniZipEpisodes(aniZip?.episodes ?? []);
+  // The episode list itself still comes from ONE provider (TVDB, else TMDB,
+  // else ani.zip). Only the thumbnail may fall back to another provider's
+  // image for the same canonical episode number, and `imageSource` records
+  // which one supplied it. Fallback order is fixed: tvdb, tmdb, ani-zip.
+  const imageCandidates: EpisodeImageCandidate<MergedEpisode>[] = [
+    { source: 'tvdb', episodes: tvdb ? buildEpisodes(resolverRow, tvdb.episodes) : [] },
+    { source: 'tmdb', episodes: tmdb ? buildTmdbEpisodes(resolverRow, tmdb.episodes) : [] },
+    { source: 'ani-zip', episodes: aniZip ? buildAniZipEpisodes(aniZip.episodes) : [] }
+  ];
+  const primaryIndex = tvdb ? 0 : tmdb ? 1 : 2;
+  const providerEpisodes: MergedEpisode[] = fillEpisodeImages(
+    imageCandidates[primaryIndex],
+    imageCandidates.filter((_, index) => index !== primaryIndex)
+  );
   const episodeCountBeforeCap = enrichEpisodes(limitToAiredProgress(row, providerEpisodes), aniZip);
   const expectedEpisodeCount = anilist?.episodes ?? null;
   const episodes = capToExpectedEpisodeCount(expectedEpisodeCount, episodeCountBeforeCap);

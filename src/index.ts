@@ -9,6 +9,7 @@ import { db } from './db/index.js';
 import { startKeepAlive } from './helpers/self-poll.js';
 import { startScheduler } from './scheduler/index.js';
 import { rateLimiter } from './helpers/rate-limit.js';
+import { compression } from './helpers/compress.js';
 import { indexerRoutes } from './routes/indexer.routes.js';
 import { mappingsRoutes } from './routes/mappings.routes.js';
 
@@ -28,6 +29,17 @@ app.use('/*', cors({ origin: allowedOrigins }));
 // (default 60s), everywhere including /indexer/* (on top of its own
 // ADMIN_KEY check) and /mappings/*. RATE_LIMIT=0 -> unlimited.
 app.use('/*', rateLimiter(Config.rateLimit));
+
+// Brotli (br) when the client sends Accept-Encoding: br, gzip as the fallback,
+// uncompressed otherwise. Registered after CORS/rate-limit and before the
+// handlers, so it wraps every response below -- the JSON routes and the
+// static landing page alike. COMPRESSION=false disables it.
+if (Config.compression.enabled) {
+  app.use(
+    '/*',
+    compression({ minBytes: Config.compression.minBytes, brotliQuality: Config.compression.brotliQuality })
+  );
+}
 
 // serves public/favicon.ico, public/favicon.png, public/index.html (as static assets)
 app.use('/*', serveStatic({ root: './public' }));

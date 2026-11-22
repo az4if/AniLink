@@ -24,6 +24,55 @@ The remote mapping sources are static downloads; the optional local
 | local `ani.zip` | optional AniDB cross-reference seed/gap-fill; the complete original JSON records are retained in `ani_zip_cache` |
 | `api.ani.zip` | remote multilingual titles, provider-ID gap fills, direct AniDB/TVDB episode metadata, and artwork; raw responses remain separately cached |
 | AniList GraphQL | episode totals, airing/release dates, titles and relation graph; normalized records remain in `anilist_cache` |
+| `anime-offline-database.jsonl` (cedya77/anime-offline-database) | the `catalog_entry` table: ~38k titles keyed by AniList/MAL/Kitsu/... (about 60% have no AniDB id), fallback poster, synonyms, tags, studios; also gap-fills empty id columns on `mapping`. Maintained continuation of the archived manami-project dataset. |
+
+## Source safety: change detection, size guard, overrides
+
+Three pieces sit between the remote files and the database. All of the
+decision logic is pure (no DB import) so it is unit tested directly.
+
+**Skip what hasn't changed** (`helpers/conditional-fetch.ts`,
+`mapping/guarded-source.ts`, table `source_state`). Each download sends
+`If-None-Match` / `If-Modified-Since` from the stored fingerprint; a 304 ends
+the run for that source. Hosts that ignore validators still get skipped by a
+SHA-256 comparison before any parsing or writing. The fingerprint is stored
+only by `commit()`, after the source was fully ingested -- storing it earlier
+would make a crash look like "already done". The catalog's 60 MB JSONL is
+streamed and hashed while parsing (`helpers/stream-lines.ts`) rather than held
+in memory. A source is never skipped when something *upstream of it in the same
+sync* changed (new XML rows still need Fribb's and lists-main's gap-fills and an
+airing flag): see `runMappingSync` in `mapping/sync.ts`.
+
+**Refuse bad data** (`mapping/sync-guard.ts`). Before touching the DB, a
+source's row count is compared with the count from its last good run; a drop
+over `SYNC_MAX_DROP_PERCENT` (10; airing 60) or an empty source throws
+`SyncGuardError`, records `rejected` in `source_state`, and leaves the
+existing data alone. This matters most for the ingests that destroy data:
+`ingestAiring` clears flags and the catalog sync deletes vanished rows.
+`?force=true` is the deliberate escape hatch. Growth is not limited.
+
+**Corrections that stick** (`mapping/overrides.ts`, `overrides-apply.ts`,
+table `mapping_override`). Sources overwrite columns on every sync (Fribb
+overwrites all its id columns), so a hand edit to `mapping` would be lost. An
+override is stored as (anidb id, column, value) and re-applied as the *last*
+step of every sync. `null` forces a column empty. Only an allow-list of columns
+can be overridden (`OVERRIDABLE_FIELDS`); `mappingList` and the airing snapshot
+are excluded. Applying is idempotent -- rows that already match are not
+written -- and rows that did change are re-merged so episodes follow a
+corrected tvdb/tmdb id immediately. Deleting an override queues a forced
+sync, because the source value only comes back when a source next writes it.
+
+**The catalog** (`mapping/aod.ts` parser, `catalog-ingest.ts`, `catalog.ts`).
+`catalog_entry` is replaced wholesale each time the file changes: every row is
+upserted stamped with the download's hash, and rows carrying any other hash are
+deleted only after the full pass succeeded. The ID of an entry is read from its
+`sources` URLs (patterns verified against the real dataset: animecountdown has
+no `/anime/`, ANN uses `?id=`). The dataset's shared `no_pic.png` placeholder
+is dropped, and `episodes: 0` means "unknown" upstream so it becomes `null`.
+Catalog data is applied to responses at *read time* (`overlayCatalog`) and only
+fills gaps -- it never overrides TVDB/TMDB/ani.zip data or an existing id.
+Disagreements between the mapping sources and the catalog are reported at
+`GET /indexer/reports/id-conflicts`, not silently resolved either way.
 
 ## Why no live AniDB API access
 
@@ -71,13 +120,16 @@ Nothing runs automatically until `ENABLE_SCHEDULER=true`. Alternative: an
 outside pinger (cron-job.org) calling `POST /indexer/*` on a timer instead.
 Either works; you need one of them.
 
-Once on, three independent lanes:
+Once on, these independent lanes:
 
 1. **Every `MAPPING_SYNC_HOURS`** -- imports optional ani.zip and refreshes
    the four remote mapping sources
-   and updates `mapping`. Knows exactly which anidb_ids are new since last
-   time.
-2. **Every `PROVIDER_SYNC_HOURS`** -- runs one ordered pipeline for each
+   and updates `mapping`, gap-fills it from the catalog, then re-applies manual
+   overrides. Unchanged sources are skipped. Knows exactly which anidb_ids are
+   new since last time.
+2. **Every `CATALOG_SYNC_HOURS`** -- refreshes the anime-offline-database
+   catalog, then re-fills and re-applies overrides.
+3. **Every `PROVIDER_SYNC_HOURS`** -- runs one ordered pipeline for each
    new or airing AniDB record: AniList first when mapped, TVDB when it has a
    TVDB ID, otherwise TMDB when it has a TMDB ID, then remote ani.zip every
    time. AniList validates known episode totals and airing/release dates, and
@@ -168,6 +220,12 @@ npx tsx test/tmdb-client.test.ts         # TMDB full payload, artwork and season
 npx tsx test/ani-zip.test.ts             # local archive normalization and lossless raw record handling
 npx tsx test/ani-zip-client.test.ts      # remote multilingual titles, mappings, episode data, and artwork normalization
 npx tsx test/anilist-client.test.ts      # GraphQL metadata normalization and conservative relation/special segments
+npm run test:unit                        # the five below in one go -- none need a DB or network
+npx tsx test/conditional-fetch.test.ts  # 304 / same-content / force / error paths, line streaming across chunk and UTF-8 boundaries
+npx tsx test/sync-guard.test.ts         # size guard + the download->parse->guard->commit flow with an in-memory store
+npx tsx test/aod.test.ts                # catalog parser against real anime-offline-database entries (document and JSONL formats)
+npx tsx test/catalog.test.ts            # read-time overlay only fills gaps; catalog-only response keeps the /mappings shape
+npx tsx test/overrides.test.ts          # override validation, allow-list, idempotent diffing
 npx tsx test/queue.test.ts              # JobQueue: FIFO, priority preemption, dedup
 npx tsx test/scheduler.test.ts          # regression test for the setInterval overflow bug
 npx tsx test/sequential-runner.test.ts  # per-id ask/get/index/wait loop timing + resume + yield

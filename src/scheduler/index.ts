@@ -1,10 +1,7 @@
 import { Config } from '../config.js';
 import { JobQueue } from './queue.js';
-import { ingestMapping } from '../mapping/ingest.js';
-import { ingestFribb } from '../mapping/fribb.js';
-import { ingestListsIds, ingestAiring } from '../mapping/lists.js';
-import { ingestAniZip } from '../mapping/ani-zip.js';
 import { runProviderSync } from '../mapping/provider-index.js';
+import { runMappingSync, runCatalogSync } from '../mapping/sync.js';
 import type { YieldCtx } from '../mapping/chunked-runner.js';
 
 /**
@@ -59,15 +56,18 @@ export function startScheduler(): void {
 
   // XML (primary: tvdb/tmdb ids, season/offset, mapping-list) -> Fribb
   // (backfills the other provider ids + type) -> lists-main ids (fills any
-  // remaining gaps) -> lists-main airing (currently-airing snapshot), every
-  // run, in that order, all on one cadence.
+  // remaining gaps) -> catalog gap-fill -> lists-main airing (currently-airing
+  // snapshot) -> manual overrides, every run, in that order, all on one
+  // cadence. Unchanged sources are skipped; see mapping/sync.ts.
   every(jsonQueue, Config.scheduler.mappingSyncHours, 'scheduled:mapping-sync', PRIORITY.mapping, async (ctx) => {
-    const aniZip = await ingestAniZip(undefined, ctx);
-    const xml = await ingestMapping(undefined, ctx);
-    const fribb = await ingestFribb(undefined, ctx);
-    const ids = await ingestListsIds(undefined, ctx);
-    const airing = await ingestAiring();
-    console.log('[scheduler] mapping-sync', { aniZip, xml, fribb, ids, airing });
+    const result = await runMappingSync(ctx);
+    console.log('[scheduler] mapping-sync', result);
+  });
+
+  // anime-offline-database changes about weekly; its own, slower cadence.
+  every(jsonQueue, Config.scheduler.catalogSyncHours, 'scheduled:catalog-sync', PRIORITY.mapping, async (ctx) => {
+    const result = await runCatalogSync(ctx);
+    console.log('[scheduler] catalog-sync', result);
   });
 
   every(providerQueue, Config.scheduler.providerSyncHours, 'scheduled:provider-incremental', PRIORITY.providerIncremental, async (ctx) => {

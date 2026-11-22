@@ -27,7 +27,11 @@ For how this works internally, why it's built this way, and testing, see
    npm run db:migrate
    ```
    Re-run `db:migrate` after any pull that changes `src/db/schema.ts` -- an
-   out-of-sync schema is the #1 cause of `Internal Server Error`.
+   out-of-sync schema is the #1 cause of `Internal Server Error`. (The
+   catalog / overrides / source-state update added three tables:
+   `catalog_entry`, `mapping_override`, `source_state`. Run `db:generate`
+   once to create their migration, commit the new files in `drizzle/`, then
+   `db:migrate`.)
 4. **Seed the mapping table:**
    ```bash
    npm run dev
@@ -56,6 +60,8 @@ For how this works internally, why it's built this way, and testing, see
    curl http://localhost:3000/indexer/status
    ```
    `rowCounts.mapping` should read ~16,000-17,000 once the sync finishes.
+   Run `curl -X POST http://localhost:3000/indexer/catalog/sync` once as well;
+   `rowCounts.catalog_entry` should then read ~38,000 (see [Catalog](#catalog-anime-offline-database)).
    `rowCounts.tvdb_cache` grows as step 5 runs. 0 or an error -> see
    [Troubleshooting](#troubleshooting).
 7. **Deploy** wherever you like, with the same env vars. On Render,
@@ -93,7 +99,11 @@ For how this works internally, why it's built this way, and testing, see
 | `PUBLIC_URL` | *(empty)* | Render keep-alive self-ping target. Blank on localhost. |
 | `RENDER_KEEP_ALIVE` | `false` | `true` only on Render free tier. |
 | `ENABLE_SCHEDULER` | `false` | Turns on the in-process scheduler. |
-| `MAPPING_SYNC_HOURS` | `3` | XML/Fribb/ids/airing refresh cadence. |
+| `MAPPING_SYNC_HOURS` | `3` | XML/Fribb/ids/airing refresh cadence. Sources that have not changed are skipped, so this is cheap. |
+| `CATALOG_SYNC_HOURS` | `24` | anime-offline-database catalog refresh cadence (the upstream file changes about weekly). |
+| `SYNC_MAX_DROP_PERCENT` | `10` | A source whose row count fell by more than this since its last good run is **rejected** and the existing data left alone. See [Safety checks](#safety-checks-on-the-sources). |
+| `FORCE_SOURCE_REFRESH` | `false` | `true` = ignore "unchanged" detection and the size guard on every sync. For debugging; prefer `?force=true` on a single call. |
+| `AOD_URL` | cedya77/anime-offline-database `latest` release (`.jsonl`) | Catalog source. A URL ending in `.json` is read as the single-document `-minified.json` variant. `.zst` files are not supported. |
 | `PROVIDER_SYNC_HOURS` | `6` | Unified AniList → TVDB/TMDB fallback → ani.zip incremental pass cadence. |
 | `PROVIDER_FULL_SYNC_HOURS` | `720` | Unified provider full-catalog pass cadence. |
 | `INDEX_DELAY` | `5` | Seconds between complete provider-pipeline entries, including AniList and ani.zip. |
@@ -113,15 +123,22 @@ For how this works internally, why it's built this way, and testing, see
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/mappings?anidb_id=` | Also accepts `mal_id`, `anilist_id`, `kitsu_id`, `anisearch_id`, `notifymoe_id`, `livechart_id`, `thetvdb_id`, `themoviedb_id`, `imdb_id`, and `animeplanet_id`. |
+| GET | `/mappings?anidb_id=` | Also accepts `mal_id`, `anilist_id`, `kitsu_id`, `anisearch_id`, `notifymoe_id`, `livechart_id`, `thetvdb_id`, `themoviedb_id`, `imdb_id`, and `animeplanet_id`. Titles with no AniDB id are answered from the [catalog](#catalog-anime-offline-database) when looked up by `mal_id`, `anilist_id`, `kitsu_id`, `anisearch_id`, `livechart_id`, or `animeplanet_id`. |
 | GET | `/health` | `200` when DB reachable, `503` when not -- self-heals, no restart needed |
 | GET | `/indexer/status` | job history + row counts. Check this first for any issue. |
 | GET | `/indexer/queue/status` | what's running/pending right now |
-| POST | `/indexer/mapping/sync` | all 4 mapping sources |
-| POST | `/indexer/mapping/refresh` | XML only |
-| POST | `/indexer/mapping/fribb-refresh` | Fribb only |
-| POST | `/indexer/mapping/lists-refresh` | lists-main ids + airing |
+| POST | `/indexer/mapping/sync` | all mapping sources + catalog gap-fill + overrides. `?force=true` re-processes unchanged sources and bypasses the size guard. |
+| POST | `/indexer/mapping/refresh` | XML only (also accepts `?force=true`) |
+| POST | `/indexer/mapping/fribb-refresh` | Fribb only (also accepts `?force=true`) |
+| POST | `/indexer/mapping/lists-refresh` | lists-main ids + airing (also accepts `?force=true`) |
 | POST | `/indexer/mapping/ani-zip-refresh` | optional local ani.zip import |
+| POST | `/indexer/catalog/sync` | anime-offline-database catalog (also accepts `?force=true`) |
+| GET | `/indexer/overrides` | stored manual corrections + the fields that can be overridden |
+| PUT | `/indexer/overrides/:anidbId/:field` | add/replace a correction. Body `{ "value": <json>, "reason": "..." }`; `null` clears the field |
+| DELETE | `/indexer/overrides/:anidbId/:field` | remove a correction (queues a forced sync to restore the source value) |
+| POST | `/indexer/overrides/apply` | re-apply all corrections now |
+| GET | `/indexer/reports` | data-quality counts: no AniList id, no TVDB/TMDB, no image, id conflicts, catalog-only |
+| GET | `/indexer/reports/:kind` | the rows behind one report (`?limit=&offset=`) |
 | POST | `/indexer/providers/incremental` | unified new + airing provider pass |
 | POST | `/indexer/providers/full` | unified whole-catalog provider pass |
 
@@ -214,6 +231,80 @@ TVDB extended records and TMDB API records stay in `tvdb_cache` and
 AniDB/TVDB episode IDs. AniList records and conservative relation segments
 stay in `anilist_cache` and `anime_segment`. `artworks` is the normalized,
 provenance-preserving view.
+
+## Catalog (anime-offline-database)
+
+AniLink's `mapping` table is keyed on AniDB, so a title with no AniDB id
+cannot have a row there. About 60% of
+[cedya77/anime-offline-database](https://github.com/cedya77/anime-offline-database)
+has no AniDB id (roughly 18,000 of its 38,000 entries still carry an AniList or
+MAL id), so it is kept in its own `catalog_entry` table and used three ways:
+
+- **Lookup fallback.** `GET /mappings?anilist_id=...` (or `mal_id`,
+  `kitsu_id`, ...) for a title with no AniDB entry returns the same response
+  shape with the ids, title, type, episode count, status and poster the
+  catalog knows. TVDB/TMDB ids and episodes are honestly empty.
+- **Gap-fill.** Empty provider-id columns on `mapping` rows are filled from the
+  catalog entry with the same AniDB id. Existing values are never overwritten;
+  where the sources disagree, `GET /indexer/reports/id-conflicts` shows it.
+- **Fallback image + extras.** Every `/mappings` response gains a `catalog`
+  block (synonyms, tags, studios, season, score, related ids) and, when no
+  better source supplied one, a poster (`artworks[].source: "aod"`). Posters
+  are hotlinked provider CDN URLs (mostly MyAnimeList), and the dataset's shared
+  "no picture" placeholder is dropped rather than served.
+
+Data attribution: contains information from
+[cedya77/anime-offline-database](https://github.com/cedya77/anime-offline-database),
+the continuation of
+[manami-project/anime-offline-database](https://github.com/manami-project/anime-offline-database),
+made available under the
+[ODbL v1.0](https://opendatacommons.org/licenses/odbl/1-0/) with contents under the
+[DbCL v1.0](https://opendatacommons.org/licenses/dbcl/1-0/). Their licence asks for
+attribution of both projects and applies share-alike terms to a database you
+redistribute -- check that against AniLink's own licence below if you expose
+this data publicly.
+
+## Safety checks on the sources
+
+The remote sources are community-maintained files, and they occasionally break.
+
+- **Unchanged sources are skipped.** Each source's ETag / Last-Modified and a
+  SHA-256 of its content are stored in `source_state`; an unchanged file costs
+  one conditional request and no DB writes. A source is only marked as
+  processed after it finished, so an interrupted run is retried, not skipped.
+- **Shrunken sources are rejected.** If a source's row count dropped by more
+  than `SYNC_MAX_DROP_PERCENT` (airing: 60%) since its last good run, or it is
+  empty, the sync refuses it and keeps the existing data. `GET /indexer/status`
+  shows each source's `lastStatus` / `lastError`. After checking that upstream
+  really did shrink, re-run with `?force=true`.
+- **One bad source no longer stops the others.** Each step of a mapping sync is
+  isolated and failures are collected in the job result.
+
+## Manual overrides
+
+When a community source is wrong, fixing the `mapping` row directly does not
+last -- the next sync overwrites it. An override is stored separately and
+re-applied **after every sync**, so it always wins:
+
+```bash
+# pin the right TVDB series for AniDB 1234
+curl -X PUT http://localhost:3000/indexer/overrides/1234/tvdbId \
+  -H "x-admin-key: $ADMIN_KEY" -H "content-type: application/json" \
+  -d '{ "value": 98765, "reason": "xml maps this cour to the wrong series" }'
+
+# force a wrong MAL id empty
+curl -X PUT http://localhost:3000/indexer/overrides/1234/malId \
+  -H "x-admin-key: $ADMIN_KEY" -H "content-type: application/json" \
+  -d '{ "value": null, "reason": "points at a different cour" }'
+```
+
+Overridable fields: provider ids (`anilistId`, `malId`, `kitsuId`, `livechartId`,
+`anisearchId`, `animePlanetId`, `animeNewsNetworkId`, `animeCountdownId`,
+`simklId`, `notifyMoeId`, `tvdbId`, `tmdbTvId`, `tmdbMovieIds`, `imdbIds`),
+`type`, `title`, and the season/offset columns (`defaultTvdbSeason`,
+`tvdbEpisodeOffset`, `defaultTmdbSeason`, `tmdbEpisodeOffset`, `tvdbAbsolute`,
+`tmdbAbsolute`). Rows whose values change are re-merged immediately.
+`GET /indexer/reports` lists where corrections are most likely needed.
 
 ## Troubleshooting
 

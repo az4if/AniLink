@@ -3,14 +3,11 @@ import { Config } from '../config.js';
 import { db, schema } from '../db/index.js';
 import { parseAnimeListXml, type MappingRow } from './xml-parser.js';
 import { runChunked, type YieldCtx } from './chunked-runner.js';
-import { fetchWithHeaders } from '../helpers/fetch.js';
 import type { MappingListEntry } from '../db/schema.js';
+import { loadSource } from './source-state.js';
+import type { SourceSyncOptions } from './guarded-source.js';
 
-async function downloadXml(): Promise<string> {
-  const res = await fetchWithHeaders(Config.sources.animeListMasterXmlUrl);
-  if (!res.ok) throw new Error(`Failed to download anime-list-master.xml: HTTP ${res.status}`);
-  return res.text();
-}
+const SOURCE_KEY = 'anime-list-master-xml';
 
 function toDbRow(row: MappingRow) {
   return {
@@ -47,10 +44,35 @@ function excluded(column: string) {
  * and yield-aware -- see chunked-runner.ts -- so a run interrupted by a
  * higher-priority scheduled job (or a redeploy) picks back up instead of
  * starting over, and reports which anidb_ids are new since last time.
+ *
+ * When downloading (no `xmlContent`), an unchanged file is skipped and a file
+ * that lost too many entries is rejected -- see guarded-source.ts. The source
+ * is marked as processed only after the last chunk, so an interrupted pass
+ * is retried rather than skipped.
  */
-export async function ingestMapping(xmlContent?: string, ctx?: YieldCtx): Promise<{ total: number; added: number[]; done: boolean }> {
-  const xml = xmlContent ?? (await downloadXml());
-  const rows = parseAnimeListXml(xml);
+export async function ingestMapping(
+  xmlContent?: string,
+  ctx?: YieldCtx,
+  options: SourceSyncOptions = {}
+): Promise<{ total: number; added: number[]; done: boolean; skipped?: string }> {
+  let rows: MappingRow[];
+  let commit: (() => Promise<void>) | null = null;
+
+  if (xmlContent !== undefined) {
+    rows = parseAnimeListXml(xmlContent);
+  } else {
+    const loaded = await loadSource({
+      key: SOURCE_KEY,
+      url: Config.sources.animeListMasterXmlUrl,
+      label: 'anime-list-master.xml',
+      force: options.force,
+      parse: parseAnimeListXml,
+      count: (parsed) => parsed.length
+    });
+    if (loaded.skipped) return { total: 0, added: [], done: true, skipped: loaded.reason };
+    rows = loaded.data;
+    commit = loaded.commit;
+  }
 
   const result = await runChunked(
     'mapping-xml',
@@ -84,6 +106,8 @@ export async function ingestMapping(xmlContent?: string, ctx?: YieldCtx): Promis
     },
     ctx
   );
+
+  if (result.done && commit) await commit();
 
   console.log(`[mapping-ingest] ${result.processed}/${rows.length} processed, ${result.added.length} new, done=${result.done}`);
   return { total: rows.length, added: result.added, done: result.done };

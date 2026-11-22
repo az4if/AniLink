@@ -74,7 +74,27 @@ export const Config = {
     // `airing`/`episodeProgress` column comments in schema.ts for what this
     // can and can't tell you.
     animeAiringJsonUrl:
-      process.env.ANIME_AIRING_JSON_URL ?? 'https://raw.githubusercontent.com/anime-and-manga/lists/main/anime-airing.json'
+      process.env.ANIME_AIRING_JSON_URL ?? 'https://raw.githubusercontent.com/anime-and-manga/lists/main/anime-airing.json',
+
+    // cedya77/anime-offline-database -- maintained continuation of the
+    // archived manami-project dataset. JSONL (one anime per line, streamed
+    // so the ~60 MB file is never held in memory). A URL ending in .json is
+    // read as the single-document `-minified.json` variant instead. The
+    // .zst variants are NOT supported (Node's zstd support is too recent).
+    aodUrl:
+      process.env.AOD_URL ??
+      'https://github.com/cedya77/anime-offline-database/releases/download/latest/anime-offline-database.jsonl'
+  },
+
+  // Safety nets around the remote sources (see sync-guard.ts, guarded-source.ts).
+  sync: {
+    // Refuse a source whose row count fell by more than this many percent
+    // since its last successful run. Airing uses a looser built-in limit
+    // because the number of airing shows swings with the season.
+    maxDropPercent: Number(process.env.SYNC_MAX_DROP_PERCENT ?? 10),
+    // true = ignore "unchanged" detection AND the size guard on every sync.
+    // Meant for debugging; prefer POST ...?force=true for a one-off.
+    forceRefresh: (process.env.FORCE_SOURCE_REFRESH ?? 'false').toLowerCase() === 'true'
   },
 
   // Unset or empty -> POST /indexer/* is open, no key required (see
@@ -107,6 +127,9 @@ export const Config = {
     mappingSyncHours: Number(process.env.MAPPING_SYNC_HOURS ?? 3),
     // Unified pipeline timing.
     providerSyncHours: Number(process.env.PROVIDER_SYNC_HOURS ?? 6),
-    providerFullSyncHours: Number(process.env.PROVIDER_FULL_SYNC_HOURS ?? 24 * 30)
+    providerFullSyncHours: Number(process.env.PROVIDER_FULL_SYNC_HOURS ?? 24 * 30),
+    // anime-offline-database catalog refresh. It changes about weekly, and an
+    // unchanged file costs one conditional request, so daily is plenty.
+    catalogSyncHours: Number(process.env.CATALOG_SYNC_HOURS ?? 24)
   }
 };

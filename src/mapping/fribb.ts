@@ -1,8 +1,11 @@
 import { sql } from 'drizzle-orm';
 import { Config } from '../config.js';
 import { db, schema } from '../db/index.js';
-import { fetchWithHeaders } from '../helpers/fetch.js';
 import { runChunked, type YieldCtx } from './chunked-runner.js';
+import { loadSource } from './source-state.js';
+import type { SourceSyncOptions } from './guarded-source.js';
+
+const SOURCE_KEY = 'fribb';
 
 export type FribbEntry = {
   anidb_id?: number;
@@ -27,11 +30,13 @@ export type FribbEntry = {
   episode_offset?: { tvdb?: number; tmdb?: number };
 };
 
-async function downloadFribbJson(): Promise<FribbEntry[]> {
-  const res = await fetchWithHeaders(Config.sources.fribbJsonUrl);
-  if (!res.ok) throw new Error(`Failed to download Fribb-format mapping JSON: HTTP ${res.status}`);
-  return res.json();
+function parseFribbJson(text: string): FribbEntry[] {
+  const parsed: unknown = JSON.parse(text);
+  if (!Array.isArray(parsed)) throw new Error('Fribb-format mapping JSON is not an array -- unexpected format');
+  return parsed as FribbEntry[];
 }
+
+const hasAnidbId = (e: FribbEntry): e is FribbEntry & { anidb_id: number } => typeof e.anidb_id === 'number';
 
 function excluded(column: string) {
   return sql.raw(`excluded.${column}`);
@@ -84,10 +89,29 @@ export function toFribbDbRow(e: FribbEntry & { anidb_id: number }) {
  */
 export async function ingestFribb(
   entries?: FribbEntry[],
-  ctx?: YieldCtx
-): Promise<{ total: number; skippedNoAnidbId: number; added: number[]; done: boolean }> {
-  const all = entries ?? (await downloadFribbJson());
-  const withAnidbId = all.filter((e): e is FribbEntry & { anidb_id: number } => typeof e.anidb_id === 'number');
+  ctx?: YieldCtx,
+  options: SourceSyncOptions = {}
+): Promise<{ total: number; skippedNoAnidbId: number; added: number[]; done: boolean; skipped?: string }> {
+  let all: FribbEntry[];
+  let commit: (() => Promise<void>) | null = null;
+
+  if (entries !== undefined) {
+    all = entries;
+  } else {
+    // The size guard counts only entries with an AniDB id: those are the ones this pass uses.
+    const loaded = await loadSource({
+      key: SOURCE_KEY,
+      url: Config.sources.fribbJsonUrl,
+      label: 'Fribb-format mapping JSON',
+      force: options.force,
+      parse: parseFribbJson,
+      count: (parsed) => parsed.filter(hasAnidbId).length
+    });
+    if (loaded.skipped) return { total: 0, skippedNoAnidbId: 0, added: [], done: true, skipped: loaded.reason };
+    all = loaded.data;
+    commit = loaded.commit;
+  }
+  const withAnidbId = all.filter(hasAnidbId);
 
   const result = await runChunked(
     'mapping-fribb',
@@ -130,6 +154,8 @@ export async function ingestFribb(
     },
     ctx
   );
+
+  if (result.done && commit) await commit();
 
   console.log(`[fribb-ingest] ${result.processed}/${withAnidbId.length} processed, ${result.added.length} new, done=${result.done}`);
   return { total: withAnidbId.length, skippedNoAnidbId: all.length - withAnidbId.length, added: result.added, done: result.done };

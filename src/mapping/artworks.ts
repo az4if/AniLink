@@ -5,7 +5,7 @@ export type Artwork = {
   height: number | null;
   language: string | null;
   type: 'poster' | 'background' | 'logo' | 'icon' | 'screencap' | 'photo' | 'clearart' | 'unknown';
-  source: 'tvdb' | 'tmdb' | 'ani-zip';
+  source: 'tvdb' | 'tmdb' | 'ani-zip' | 'aod';
   providerType: number | string | null;
   score: number | null;
   includesText: boolean | null;

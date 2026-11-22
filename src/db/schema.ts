@@ -1,4 +1,5 @@
-import { pgTable, integer, text, jsonb, boolean, timestamp } from 'drizzle-orm/pg-core';
+import { pgTable, integer, text, jsonb, boolean, timestamp, doublePrecision, index, primaryKey } from 'drizzle-orm/pg-core';
+import type { CatalogRelated } from '../mapping/aod.js';
 
 /**
  * Source-of-truth mapping, one row per AniDB anime (~16,865 once fully seeded).
@@ -158,3 +159,100 @@ export const indexerState = pgTable('indexer_state', {
   cursor: integer('cursor').notNull().default(0),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
 });
+
+/**
+ * What we last saw of each remote source, so an unchanged file is not
+ * re-downloaded/re-processed and a suspiciously shrunken one is rejected.
+ * `fingerprint` columns are only written after a source was fully processed;
+ * `rowCount` is the baseline the size guard compares the next download against.
+ */
+export const sourceState = pgTable('source_state', {
+  sourceKey: text('source_key').primaryKey(), // 'anime-list-master-xml' | 'fribb' | 'lists-anime' | 'lists-airing' | 'aod'
+  etag: text('etag'),
+  lastModified: text('last_modified'),
+  contentHash: text('content_hash'), // sha256 of the body
+  contentLength: integer('content_length'),
+  rowCount: integer('row_count'),
+  lastStatus: text('last_status'), // changed | unchanged | rejected | error
+  lastError: text('last_error'),
+  lastCheckedAt: timestamp('last_checked_at', { withTimezone: true }),
+  lastChangedAt: timestamp('last_changed_at', { withTimezone: true }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
+});
+
+/**
+ * Hand-curated corrections applied to `mapping` after every sync (see
+ * src/mapping/overrides.ts). One row per (anime, column). A `value` of
+ * 'null' means "force this column empty". No foreign key on purpose: an override can
+ * be filed for an AniDB id the sources have not delivered yet.
+ */
+export const mappingOverride = pgTable(
+  'mapping_override',
+  {
+    anidbId: integer('anidb_id').notNull(),
+    field: text('field').notNull(), // a key of OVERRIDABLE_FIELDS
+    // JSON-encoded text ('98765', '"cowboy-bebop"', '[1,2]', 'null'), not jsonb: the
+    // value's JSON type is part of the data (a numeric-looking slug must stay a
+    // string) and a driver round-trip through jsonb can silently re-type it.
+    // 'null' means "force this column empty".
+    value: text('value').notNull(),
+    reason: text('reason'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [primaryKey({ columns: [table.anidbId, table.field] })]
+);
+
+/**
+ * cedya77/anime-offline-database, one row per upstream entry. Unlike `mapping`
+ * this is NOT keyed on AniDB: ~60% of the dataset has no AniDB id, and those
+ * titles are still reachable here by their AniList/MAL/Kitsu/... id. Replaced
+ * wholesale on each changed download (rows from older downloads are deleted by
+ * `source_hash`). Also gap-fills `mapping` and supplies fallback images.
+ */
+export const catalogEntry = pgTable(
+  'catalog_entry',
+  {
+    key: text('key').primaryKey(), // e.g. 'anilist:1' -- first available id, see aod.ts
+    anidbId: integer('anidb_id'),
+    anilistId: integer('anilist_id'),
+    malId: integer('mal_id'),
+    kitsuId: integer('kitsu_id'),
+    anisearchId: integer('anisearch_id'),
+    livechartId: integer('livechart_id'),
+    animePlanetId: text('anime_planet_id'),
+    animeNewsNetworkId: integer('animenewsnetwork_id'),
+    animeCountdownId: integer('animecountdown_id'),
+    simklId: integer('simkl_id'),
+
+    title: text('title').notNull(),
+    type: text('type'), // TV | MOVIE | OVA | ONA | SPECIAL | UNKNOWN
+    episodes: integer('episodes'), // null = unknown (upstream writes 0)
+    status: text('status'), // FINISHED | ONGOING | UPCOMING | UNKNOWN
+    season: text('season'), // WINTER | SPRING | SUMMER | FALL
+    seasonYear: integer('season_year'),
+    durationSeconds: integer('duration_seconds'),
+    score: doublePrecision('score'), // community mean, 1-10
+    picture: text('picture'), // null when upstream only had its shared placeholder
+    thumbnail: text('thumbnail'),
+    synonyms: text('synonyms').array().notNull(),
+    studios: text('studios').array().notNull(),
+    producers: text('producers').array().notNull(),
+    tags: text('tags').array().notNull(),
+    related: jsonb('related').$type<CatalogRelated>().notNull(),
+    sources: text('sources').array().notNull(), // the provider URLs the ids were read from
+
+    sourceHash: text('source_hash').notNull(), // sha256 of the download this row came from
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [
+    index('catalog_entry_anidb_idx').on(table.anidbId),
+    index('catalog_entry_anilist_idx').on(table.anilistId),
+    index('catalog_entry_mal_idx').on(table.malId),
+    index('catalog_entry_kitsu_idx').on(table.kitsuId),
+    index('catalog_entry_anisearch_idx').on(table.anisearchId),
+    index('catalog_entry_livechart_idx').on(table.livechartId),
+    index('catalog_entry_animeplanet_idx').on(table.animePlanetId),
+    index('catalog_entry_hash_idx').on(table.sourceHash)
+  ]
+);

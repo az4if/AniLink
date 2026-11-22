@@ -2,7 +2,8 @@ import { sql, eq } from 'drizzle-orm';
 import { Config } from '../config.js';
 import { db, schema } from '../db/index.js';
 import { runChunked, type YieldCtx } from './chunked-runner.js';
-import { fetchWithHeaders } from '../helpers/fetch.js';
+import { loadSource } from './source-state.js';
+import type { SourceSyncOptions } from './guarded-source.js';
 
 type ListsIdEntry = { idAL?: number; idAniDB?: number; idMal?: number };
 
@@ -19,11 +20,18 @@ export function toAiringFields(e: ListsAiringEntry): { episodeProgress: number |
   };
 }
 
-async function downloadJson<T>(url: string, label: string): Promise<T> {
-  const res = await fetchWithHeaders(url);
-  if (!res.ok) throw new Error(`Failed to download ${label}: HTTP ${res.status}`);
-  return res.json();
+function parseJsonArray<T>(label: string) {
+  return (text: string): T[] => {
+    const parsed: unknown = JSON.parse(text);
+    if (!Array.isArray(parsed)) throw new Error(`${label} is not an array -- unexpected format`);
+    return parsed as T[];
+  };
 }
+
+// The number of airing shows swings with the season, so its size guard is much
+// looser than the catalog-sized sources'. It still catches the real danger:
+// an empty/truncated file wiping the airing flag from every show.
+const AIRING_MAX_DROP_PERCENT = 60;
 
 /**
  * Backfills anilist_id/mal_id from lists-main's anime.json, but ONLY where
@@ -32,9 +40,31 @@ async function downloadJson<T>(url: string, label: string): Promise<T> {
  * Fribb hasn't indexed yet (lists-main updates daily). Resumable/yield-aware,
  * see chunked-runner.ts.
  */
-export async function ingestListsIds(entries?: ListsIdEntry[], ctx?: YieldCtx): Promise<{ total: number; added: number[]; done: boolean }> {
-  const all = entries ?? (await downloadJson<ListsIdEntry[]>(Config.sources.animeJsonUrl, 'anime.json'));
-  const withAnidbId = all.filter((e): e is ListsIdEntry & { idAniDB: number } => typeof e.idAniDB === 'number');
+export async function ingestListsIds(
+  entries?: ListsIdEntry[],
+  ctx?: YieldCtx,
+  options: SourceSyncOptions = {}
+): Promise<{ total: number; added: number[]; done: boolean; skipped?: string }> {
+  const hasAnidbId = (e: ListsIdEntry): e is ListsIdEntry & { idAniDB: number } => typeof e.idAniDB === 'number';
+  let all: ListsIdEntry[];
+  let commit: (() => Promise<void>) | null = null;
+
+  if (entries !== undefined) {
+    all = entries;
+  } else {
+    const loaded = await loadSource({
+      key: 'lists-anime',
+      url: Config.sources.animeJsonUrl,
+      label: 'anime.json',
+      force: options.force,
+      parse: parseJsonArray<ListsIdEntry>('anime.json'),
+      count: (parsed) => parsed.filter(hasAnidbId).length
+    });
+    if (loaded.skipped) return { total: 0, added: [], done: true, skipped: loaded.reason };
+    all = loaded.data;
+    commit = loaded.commit;
+  }
+  const withAnidbId = all.filter(hasAnidbId);
 
   const result = await runChunked(
     'mapping-lists-ids',
@@ -59,6 +89,8 @@ export async function ingestListsIds(entries?: ListsIdEntry[], ctx?: YieldCtx): 
     ctx
   );
 
+  if (result.done && commit) await commit();
+
   console.log(`[lists-ingest] ids: ${result.processed}/${withAnidbId.length} processed, ${result.added.length} new, done=${result.done}`);
   return { total: withAnidbId.length, added: result.added, done: result.done };
 }
@@ -73,9 +105,28 @@ export async function ingestListsIds(entries?: ListsIdEntry[], ctx?: YieldCtx): 
  * would be a worse inconsistency than just letting it finish.
  */
 export async function ingestAiring(
-  entries?: ListsAiringEntry[]
-): Promise<{ total: number; notInCatalog: number; newlyAiring: number[]; noLongerAiring: number[] }> {
-  const all = entries ?? (await downloadJson<ListsAiringEntry[]>(Config.sources.animeAiringJsonUrl, 'anime-airing.json'));
+  entries?: ListsAiringEntry[],
+  options: SourceSyncOptions = {}
+): Promise<{ total: number; notInCatalog: number; newlyAiring: number[]; noLongerAiring: number[]; skipped?: string }> {
+  let all: ListsAiringEntry[];
+  let commit: (() => Promise<void>) | null = null;
+
+  if (entries !== undefined) {
+    all = entries;
+  } else {
+    const loaded = await loadSource({
+      key: 'lists-airing',
+      url: Config.sources.animeAiringJsonUrl,
+      label: 'anime-airing.json',
+      force: options.force,
+      parse: parseJsonArray<ListsAiringEntry>('anime-airing.json'),
+      count: (parsed) => parsed.length,
+      maxDropPercent: AIRING_MAX_DROP_PERCENT
+    });
+    if (loaded.skipped) return { total: 0, notInCatalog: 0, newlyAiring: [], noLongerAiring: [], skipped: loaded.reason };
+    all = loaded.data;
+    commit = loaded.commit;
+  }
 
   const wasAiring = new Set(
     (await db.select({ anidbId: schema.mapping.anidbId }).from(schema.mapping).where(eq(schema.mapping.airing, true))).map(
@@ -106,6 +157,8 @@ export async function ingestAiring(
 
   const newlyAiring = [...nowAiring].filter((id) => !wasAiring.has(id));
   const noLongerAiring = [...wasAiring].filter((id) => !nowAiring.has(id));
+
+  if (commit) await commit();
 
   console.log(`[lists-ingest] airing: ${nowAiring.size} airing, ${newlyAiring.length} newly-airing, ${noLongerAiring.length} finished`);
   return { total: all.length, notInCatalog, newlyAiring, noLongerAiring };

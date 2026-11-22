@@ -1,0 +1,558 @@
+{
+ "$schema": "https://raw.githubusercontent.com/cedya77/anime-offline-database/refs/tags/2026-46/schemas/anime-offline-database-minified.schema.json",
+ "license": {
+  "name": "Open Data Commons Open Database License (ODbL) v1.0 + Database Contents License (DbCL) v1.0",
+  "url": "https://github.com/cedya77/anime-offline-database/blob/2026-46/LICENSE"
+ },
+ "repository": "https://github.com/cedya77/anime-offline-database",
+ "scoreRange": {
+  "minInclusive": 1.0,
+  "maxInclusive": 10.0
+ },
+ "lastUpdate": "2026-11-15",
+ "data": [
+  {
+   "sources": [
+    "https://anidb.net/anime/23",
+    "https://anilist.co/anime/1",
+    "https://anime-planet.com/anime/cowboy-bebop",
+    "https://animecountdown.com/37089",
+    "https://animenewsnetwork.com/encyclopedia/anime.php?id=13",
+    "https://anisearch.com/anime/1572",
+    "https://kitsu.app/anime/1",
+    "https://livechart.me/anime/3418",
+    "https://myanimelist.net/anime/1",
+    "https://simkl.com/anime/37089"
+   ],
+   "title": "Cowboy Bebop",
+   "type": "TV",
+   "episodes": 26,
+   "status": "FINISHED",
+   "animeSeason": {
+    "season": "SPRING",
+    "year": 1998
+   },
+   "picture": "https://cdn.myanimelist.net/images/anime/4/19644.jpg",
+   "thumbnail": "https://cdn.myanimelist.net/images/anime/4/19644t.jpg",
+   "duration": {
+    "value": 1440,
+    "unit": "SECONDS"
+   },
+   "score": {
+    "arithmeticGeometricMean": 8.591301011175199,
+    "arithmeticMean": 8.592635539064112,
+    "median": 8.64
+   },
+   "synonyms": [
+    "Bebop",
+    "Bebop TV",
+    "CB",
+    "CBB",
+    "COWBOY BEBOP",
+    "CowBe",
+    "Csillagközi fejvadászok",
+    "Kauboj Bebop",
+    "Kaubojus Bebopas",
+    "Kaubojus Bibopas",
+    "Kovboj Bebop",
+    "Kovboy Bebop",
+    "Kowboj Bebop",
+    "Καουμπόηδες του Διαστήματος",
+    "Ковбой Бибоп",
+    "Ковбой Бибоп ТВ",
+    "Ковбой Бібоп ТБ",
+    "Марсиански каубой",
+    "קאובוי ביבופ",
+    "راعي البقر بيبوب",
+    "صائدو جوائز بيبوب",
+    "کابوی بیباپ",
+    "คาวบอย บีบ๊อป",
+    "カウボーイビバップ",
+    "星际牛仔",
+    "星際牛仔",
+    "카우보이 비밥"
+   ],
+   "studios": [
+    "sunrise inc."
+   ],
+   "producers": [
+    "audio planning u",
+    "bandai entertainment",
+    "bandai visual",
+    "sunrise",
+    "victor entertainment"
+   ],
+   "relatedAnime": [
+    "https://anidb.net/anime/219",
+    "https://anilist.co/anime/17205",
+    "https://anilist.co/anime/4037",
+    "https://anilist.co/anime/5",
+    "https://anime-planet.com/anime/cowboy-bebop-eins-summer-vacation",
+    "https://anime-planet.com/anime/cowboy-bebop-session-xx-mish-mash-blues",
+    "https://anime-planet.com/anime/cowboy-bebop-the-movie",
+    "https://animecountdown.com/38382",
+    "https://animenewsnetwork.com/encyclopedia/anime.php?id=353",
+    "https://anisearch.com/anime/10291",
+    "https://anisearch.com/anime/261",
+    "https://anisearch.com/anime/8409",
+    "https://kitsu.app/anime/2",
+    "https://kitsu.app/anime/3424",
+    "https://kitsu.app/anime/7604",
+    "https://livechart.me/anime/3419",
+    "https://livechart.me/anime/4921",
+    "https://livechart.me/anime/5708",
+    "https://myanimelist.net/anime/17205",
+    "https://myanimelist.net/anime/4037",
+    "https://myanimelist.net/anime/5",
+    "https://simkl.com/anime/38382"
+   ],
+   "tags": [
+    "action",
+    "adult cast",
+    "adventure",
+    "air combat",
+    "amnesia",
+    "angst",
+    "anti-hero",
+    "antihero",
+    "award winning",
+    "bounty hunter",
+    "bounty hunters",
+    "car chases",
+    "carefree",
+    "cgi",
+    "character driven",
+    "circus",
+    "collateral damage",
+    "comedy",
+    "cowboys",
+    "crime",
+    "crime fiction",
+    "cross-dressing",
+    "cult",
+    "cyberpunk",
+    "cyborg",
+    "cyborgs",
+    "death",
+    "detective",
+    "disaster",
+    "drama",
+    "drugs",
+    "ensemble cast",
+    "episodic",
+    "faster-than-light travel",
+    "female protagonist",
+    "found family",
+    "future",
+    "gambling",
+    "gunfights",
+    "guns",
+    "hero of strong character",
+    "heroine of strong character",
+    "heterosexual",
+    "human enhancement",
+    "itano circus",
+    "japanese production",
+    "jazz",
+    "lgbtq+ themes",
+    "lost technology",
+    "male protagonist",
+    "mars",
+    "martial arts",
+    "massacre",
+    "medium awareness",
+    "melancholic",
+    "multi-anime projects",
+    "murder",
+    "nanomachines",
+    "neo-noir",
+    "new",
+    "noir",
+    "nudity",
+    "original work",
+    "other planet",
+    "outer space",
+    "philosophy",
+    "place",
+    "plot continuity",
+    "police",
+    "post apocalypse",
+    "post-apocalyptic",
+    "predominantly adult cast",
+    "primarily adult cast",
+    "psychoactive drugs",
+    "remastered version available",
+    "revenge",
+    "reverse trap",
+    "sci fi",
+    "sci-fi",
+    "science fiction",
+    "science-fiction",
+    "seinen",
+    "sex",
+    "shipboard",
+    "shoujo",
+    "slapstick",
+    "space",
+    "space travel",
+    "space western",
+    "speculative fiction",
+    "strong male lead",
+    "super robot wars",
+    "swordplay",
+    "tanned skin",
+    "terrorism",
+    "the arts",
+    "time",
+    "tomboy",
+    "tragedy",
+    "travel",
+    "tropes",
+    "violence",
+    "western",
+    "work",
+    "yakuza"
+   ]
+  },
+  {
+   "sources": [
+    "https://anilist.co/anime/149074",
+    "https://anime-planet.com/anime/asi-yu-xiao-liangdang",
+    "https://kitsu.app/anime/45308",
+    "https://kitsu.app/anime/47591",
+    "https://myanimelist.net/anime/52610"
+   ],
+   "title": "A Si yu Xiao Lingdang",
+   "type": "ONA",
+   "episodes": 93,
+   "status": "ONGOING",
+   "animeSeason": {
+    "season": "SUMMER",
+    "year": 2020
+   },
+   "picture": "https://cdn.myanimelist.net/images/anime/1386/126571.jpg",
+   "thumbnail": "https://cdn.myanimelist.net/images/anime/1386/126571t.jpg",
+   "duration": {
+    "value": 60,
+    "unit": "SECONDS"
+   },
+   "score": {
+    "arithmeticGeometricMean": 4.272727272727273,
+    "arithmeticMean": 4.272727272727273,
+    "median": 4.272727272727273
+   },
+   "synonyms": [
+    "Asi Yu Xiao Liangdang",
+    "Asi Yu Xiao Lingdang",
+    "Little Bell and A Si's Love Story",
+    "Little Bell and Ami's Love Story",
+    "Little Bell and Ami’s Love Story",
+    "阿巳与小铃铛"
+   ],
+   "studios": [
+    "buzhi dongman"
+   ],
+   "producers": [],
+   "relatedAnime": [
+    "https://anilist.co/anime/150580",
+    "https://anilist.co/anime/151634",
+    "https://kitsu.app/anime/47590",
+    "https://kitsu.app/anime/47592",
+    "https://kitsu.app/anime/47593",
+    "https://myanimelist.net/anime/45677",
+    "https://myanimelist.net/anime/52597",
+    "https://myanimelist.net/anime/54065"
+   ],
+   "tags": [
+    "cg animation",
+    "chinese animation",
+    "comedy",
+    "fantasy",
+    "full cgi",
+    "original work",
+    "romance",
+    "short episodes"
+   ]
+  },
+  {
+   "sources": [
+    "https://anilist.co/anime/185821",
+    "https://myanimelist.net/anime/59555"
+   ],
+   "title": "Adana no Uta",
+   "type": "SPECIAL",
+   "episodes": 1,
+   "status": "FINISHED",
+   "animeSeason": {
+    "season": "FALL",
+    "year": 1968
+   },
+   "picture": "https://raw.githubusercontent.com/cedya77/anime-offline-database/main/pics/no_pic.png",
+   "thumbnail": "https://raw.githubusercontent.com/cedya77/anime-offline-database/main/pics/no_pic_thumbnail.png",
+   "duration": {
+    "value": 120,
+    "unit": "SECONDS"
+   },
+   "score": {
+    "arithmeticGeometricMean": 5.2727272727272725,
+    "arithmeticMean": 5.2727272727272725,
+    "median": 5.2727272727272725
+   },
+   "synonyms": [
+    "Minna no Uta",
+    "あだ名のうた"
+   ],
+   "studios": [],
+   "producers": [
+    "nhk"
+   ],
+   "relatedAnime": [],
+   "tags": [
+    "kids",
+    "music"
+   ]
+  },
+  {
+   "sources": [
+    "https://anidb.net/anime/19047",
+    "https://anilist.co/anime/185515",
+    "https://anime-planet.com/anime/25-dimensional-seduction-season-2",
+    "https://animecountdown.com/2660010",
+    "https://animenewsnetwork.com/encyclopedia/anime.php?id=34167",
+    "https://anisearch.com/anime/19938",
+    "https://kitsu.app/anime/49403",
+    "https://livechart.me/anime/12967",
+    "https://myanimelist.net/anime/60510",
+    "https://simkl.com/anime/2660010"
+   ],
+   "title": "2.5-jigen no Ririsa 2nd Season",
+   "type": "TV",
+   "episodes": 12,
+   "status": "UPCOMING",
+   "animeSeason": {
+    "season": "UNDEFINED"
+   },
+   "picture": "https://cdn.myanimelist.net/images/anime/1833/146951.jpg",
+   "thumbnail": "https://cdn.myanimelist.net/images/anime/1833/146951t.jpg",
+   "score": {
+    "arithmeticGeometricMean": 8.0,
+    "arithmeticMean": 8.0,
+    "median": 8.0
+   },
+   "synonyms": [
+    "2.5 Dimensional Seduction",
+    "2.5 Dimensional Seduction Season 2",
+    "2.5 Dimensional Seduction: Season 2",
+    "2.5 Dimensional Seduction: Staffel 2",
+    "2.5 Jigen no Lilysa",
+    "2.5 Jigen no Ririsa 2",
+    "2.5 Jigen no Ririsa Season 2",
+    "2.5次元の誘惑 2",
+    "2.5次元の誘惑 第2期",
+    "NigoRiri 2",
+    "Nitengojigen no Ririsa",
+    "Ririsa, Uma Garota em 2.5D 2",
+    "にごリリ 2"
+   ],
+   "studios": [
+    "j.c.staff"
+   ],
+   "producers": [],
+   "relatedAnime": [
+    "https://anidb.net/anime/17760",
+    "https://anilist.co/anime/158559",
+    "https://anime-planet.com/anime/25-dimensional-seduction",
+    "https://animecountdown.com/2054506",
+    "https://animenewsnetwork.com/encyclopedia/anime.php?id=26712",
+    "https://anisearch.com/anime/17929",
+    "https://kitsu.app/anime/46842",
+    "https://livechart.me/anime/11718",
+    "https://myanimelist.net/anime/53802",
+    "https://simkl.com/anime/2054506"
+   ],
+   "tags": [
+    "based on a manga",
+    "club",
+    "comedy",
+    "cosplay",
+    "ecchi",
+    "female harem",
+    "harem",
+    "heterosexual",
+    "high school",
+    "japanese production",
+    "otaku",
+    "otaku culture",
+    "present",
+    "romance",
+    "romantic comedy",
+    "school",
+    "school club",
+    "school clubs",
+    "school life",
+    "sequel",
+    "shounen",
+    "slice of life",
+    "tsundere"
+   ]
+  },
+  {
+   "sources": [
+    "https://myanimelist.net/anime/62783"
+   ],
+   "title": "134 Yi Wang Ju",
+   "type": "ONA",
+   "episodes": 0,
+   "status": "UPCOMING",
+   "animeSeason": {
+    "season": "UNDEFINED",
+    "year": 2027
+   },
+   "picture": "https://cdn.myanimelist.net/images/anime/1848/153750.jpg",
+   "thumbnail": "https://cdn.myanimelist.net/images/anime/1848/153750t.jpg",
+   "synonyms": [
+    "134: The Anomalous Force",
+    "134异往局"
+   ],
+   "studios": [
+    "shuiniu dongman"
+   ],
+   "producers": [
+    "youku"
+   ],
+   "relatedAnime": [],
+   "tags": [
+    "action",
+    "fantasy",
+    "martial arts"
+   ]
+  },
+  {
+   "sources": [
+    "https://myanimelist.net/anime/63914"
+   ],
+   "title": "\"IDOLIC no Mahou\"",
+   "type": "SPECIAL",
+   "episodes": 1,
+   "status": "FINISHED",
+   "animeSeason": {
+    "season": "FALL",
+    "year": 2025
+   },
+   "picture": "https://raw.githubusercontent.com/cedya77/anime-offline-database/main/pics/no_pic.png",
+   "thumbnail": "https://raw.githubusercontent.com/cedya77/anime-offline-database/main/pics/no_pic_thumbnail.png",
+   "duration": {
+    "value": 34,
+    "unit": "SECONDS"
+   },
+   "synonyms": [
+    "\"IDOLIC's Magic\"",
+    "\"IDOLICの魔法\""
+   ],
+   "studios": [],
+   "producers": [],
+   "relatedAnime": [],
+   "tags": [
+    "music"
+   ]
+  },
+  {
+   "sources": [
+    "https://anidb.net/anime/11394",
+    "https://anime-planet.com/anime/20-dai-no-heya-hen",
+    "https://animecountdown.com/1572807",
+    "https://anisearch.com/anime/10587",
+    "https://kitsu.app/anime/10236",
+    "https://myanimelist.net/anime/29347",
+    "https://simkl.com/anime/1572807"
+   ],
+   "title": "20-dai no Heya-hen",
+   "type": "SPECIAL",
+   "episodes": 1,
+   "status": "FINISHED",
+   "animeSeason": {
+    "season": "WINTER",
+    "year": 2015
+   },
+   "picture": "https://cdn.myanimelist.net/images/anime/3/81169.jpg",
+   "thumbnail": "https://cdn.myanimelist.net/images/anime/3/81169t.jpg",
+   "duration": {
+    "value": 15,
+    "unit": "SECONDS"
+   },
+   "score": {
+    "arithmeticGeometricMean": 5.032227300584813,
+    "arithmeticMean": 5.06060791589363,
+    "median": 5.16
+   },
+   "synonyms": [
+    "20-dai no Heya Hen",
+    "MyNavi Chintai: 20-dai no Heya Hen",
+    "Rooms for Twentysomethings",
+    "マイナビ賃貸 20代の部屋編"
+   ],
+   "studios": [],
+   "producers": [],
+   "relatedAnime": [],
+   "tags": [
+    "apartment life",
+    "commercials",
+    "indefinite",
+    "japanese production",
+    "promotional",
+    "slice of life"
+   ]
+  },
+  {
+   "sources": [
+    "https://anidb.net/anime/3689",
+    "https://anilist.co/anime/185879",
+    "https://anime-planet.com/anime/aesop-no-ohanashi-yori-ushi-to-kaeru-yokubatta-inu",
+    "https://animecountdown.com/41243",
+    "https://anisearch.com/anime/1789",
+    "https://kitsu.app/anime/9179",
+    "https://myanimelist.net/anime/25627",
+    "https://simkl.com/anime/41243"
+   ],
+   "title": "\"Aesop\" no Ohanashi yori: Ushi to Kaeru, Yokubatta Inu",
+   "type": "MOVIE",
+   "episodes": 1,
+   "status": "FINISHED",
+   "animeSeason": {
+    "season": "WINTER",
+    "year": 1970
+   },
+   "picture": "https://cdn.myanimelist.net/images/anime/3/65151.jpg",
+   "thumbnail": "https://cdn.myanimelist.net/images/anime/3/65151t.jpg",
+   "duration": {
+    "value": 720,
+    "unit": "SECONDS"
+   },
+   "score": {
+    "arithmeticGeometricMean": 5.561701567452964,
+    "arithmeticMean": 5.676336920222635,
+    "median": 5.48
+   },
+   "synonyms": [
+    "\"いそっぷ\"のおはなしより 牛とかえる, よくばった犬",
+    "From Aesop's Tales: The Bull and the Frog / The Greedy Dog",
+    "From Aesop’s Tales: The Bull and the Frog / The Greedy Dog",
+    "Yokubatta Inu",
+    "“Aesop” no Ohanashi yori: Ushi to Kaeru, Yokubatta Inu",
+    "“いそっぷ”のおはなしより 牛とかえる、よくばった犬",
+    "“いそっぷ”のおはなしより　牛とかえる、よくばった犬"
+   ],
+   "studios": [],
+   "producers": [],
+   "relatedAnime": [],
+   "tags": [
+    "family friendly",
+    "fantasy",
+    "frogs",
+    "japanese production",
+    "kids",
+    "speculative fiction"
+   ]
+  }
+ ]
+}

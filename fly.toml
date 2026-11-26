@@ -1,23 +1,21 @@
-app = "anilink"
-primary_region = "iad"
+# fly.toml app configuration file generated for anilink on 2026-11-26T17:35:08Z
+#
+# See https://docs.fly.io/reference/configuration for information about how to use this file.
+#
 
+app = 'anilink'
+primary_region = 'sin'
+
+[build]
 [http_service]
-auto_start_machines = true
-auto_stop_machines = true
-force_https = true
-internal_port = 3_000
-min_machines_running = 0
-processes = [ "app" ]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
 
 [[vm]]
-cpu_kind = "shared"
-cpus = 1
-memory = "256mb"
-
-[[vm]]
-cpu_kind = "shared"
-cpus = 2
-memory = "512mb"
-memory_mb = 512
-processes = [ "app" ]
-size = "shared-cpu-2x"
+  memory = '256mb'
+  cpu_kind = 'shared'
+  cpus = 1

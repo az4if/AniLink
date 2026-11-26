@@ -78,7 +78,7 @@ footer{margin:64px 0 0;padding:22px 0;border-top:1px solid var(--line);color:var
 .backdrop{position:absolute;left:50%;top:-8px;width:100vw;height:340px;transform:translateX(-50%);background:center/cover;opacity:.32;filter:blur(3px) saturate(1.2);-webkit-mask-image:linear-gradient(#000 30%,transparent);mask-image:linear-gradient(#000 30%,transparent);pointer-events:none}
 .head{position:relative;margin-top:60px;background:rgba(24,19,15,.82);backdrop-filter:blur(10px)}
 .head img.poster{align-self:start;box-shadow:0 8px 24px #0008}.head h2{line-height:1.1}
-.id a{color:inherit;text-decoration:none}.id .cp{background:none;border:0;padding:0 0 0 6px;color:var(--muted);cursor:pointer;font-size:12px}
+.id a{color:inherit;text-decoration:none}.id .cp{background:none;border:0;padding:0 0 0 6px;color:var(--muted);cursor:pointer;font-size:12px;transition:color .2s}.id .cp:hover{color:var(--f2)}.id .cp.done{color:#4cc38a}
 .ctl{display:flex;gap:8px;margin-bottom:12px}.ctl input{flex:1}
 details.season{margin-bottom:10px}details.season summary{cursor:pointer;padding:8px 2px;font:600 15px 'Space Grotesk';list-style:none}
 details.season summary::before{content:'▸ ';color:var(--f2)}details[open]>summary::before{content:'▾ '}
@@ -286,7 +286,7 @@ $('p-art').onclick=e=>{
   if(e.target.id==='more'){artMax+=48;drawArt()}
   const a=e.target.closest('.art a');if(a){e.preventDefault();showLb(+a.dataset.i)}
 };
-$('ids').onclick=e=>{const c=e.target.closest('.cp');if(c){navigator.clipboard&&navigator.clipboard.writeText(c.dataset.c);msg('Copied '+c.dataset.c)}};
+$('ids').onclick=e=>{const c=e.target.closest('.cp');if(c){navigator.clipboard&&navigator.clipboard.writeText(c.dataset.c);msg('Copied '+c.dataset.c);c.classList.add('done');setTimeout(()=>c.classList.remove('done'),1500)}};
 $('copy').onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText($('json').textContent);$('copy').textContent='Copied';setTimeout(()=>$('copy').textContent='Copy JSON',1200)};
 document.addEventListener('click',e=>{const c=e.target.closest('.chip[data-p]');if(c){$('prov').value=c.dataset.p;$('val').value=c.dataset.v;lookup()}});
 function recent(){try{return JSON.parse(localStorage.getItem('al_recent')||'[]')}catch(e){return[]}}

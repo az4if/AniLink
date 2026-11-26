@@ -1,5 +1,5 @@
 app = "anilink"
-primary_region = "nrt"
+primary_region = "iad"
 
 [http_service]
 auto_start_machines = true

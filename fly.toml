@@ -4,7 +4,7 @@
 #
 
 app = 'anilink'
-primary_region = 'sin'
+primary_region = 'iad'
 
 [build]
 [http_service]

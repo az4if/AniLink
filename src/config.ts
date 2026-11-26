@@ -12,7 +12,9 @@ export const Config = {
   databaseUrl: required('DATABASE_URL'),
   port: Number(process.env.PORT ?? 3000),
   publicUrl: process.env.PUBLIC_URL ?? '',
-  renderKeepAlive: (process.env.RENDER_KEEP_ALIVE ?? 'false').toLowerCase() === 'true',
+  // SELF_PING=true -> ping our own /health every 10 min so hosts that sleep
+  // on idle (Render free, Hugging Face Spaces, ...) stay warm.
+  selfPing: (process.env.SELF_PING ?? 'false').toLowerCase() === 'true',
 
   tvdb: {
     apiKey: process.env.TVDB_API_KEY ?? '',

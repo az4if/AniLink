@@ -81,8 +81,8 @@ For how this works internally, why it's built this way, and testing, see
      re-run `db:migrate` by hand each time (see
      [Troubleshooting](#troubleshooting)).
 
-   Host sleeps when idle (Render free tier)? Also set
-   `RENDER_KEEP_ALIVE=true` and `PUBLIC_URL`.
+   Host sleeps when idle (Render free tier, Hugging Face Spaces)? Also set
+   `SELF_PING=true` and `PUBLIC_URL`.
 8. **Turn on scheduling:** set `ENABLE_SCHEDULER=true`. Nothing runs
    automatically until this is set.
 
@@ -99,8 +99,8 @@ For how this works internally, why it's built this way, and testing, see
 | `COMPRESSION` | `true` | Brotli when the client sends `Accept-Encoding: br`, gzip otherwise. `false` disables it (e.g. if a proxy/CDN already compresses). |
 | `COMPRESSION_MIN_BYTES` | `1024` | Responses smaller than this are sent uncompressed. |
 | `BROTLI_QUALITY` | `4` | Brotli quality 0-11. 4 keeps most of the size win at near-gzip speed; 11 is far too slow per request. |
-| `PUBLIC_URL` | *(empty)* | Render keep-alive self-ping target. Blank on localhost. |
-| `RENDER_KEEP_ALIVE` | `false` | `true` only on Render free tier. |
+| `PUBLIC_URL` | *(empty)* | Self-ping target. Blank on localhost. |
+| `SELF_PING` | `false` | `true` only on hosts that sleep when idle (Render free tier, Hugging Face Spaces). |
 | `ENABLE_SCHEDULER` | `false` | Turns on the in-process scheduler. |
 | `MAPPING_SYNC_HOURS` | `3` | XML/Fribb/ids/airing refresh cadence. Sources that have not changed are skipped, so this is cheap. |
 | `CATALOG_SYNC_HOURS` | `24` | anime-offline-database catalog refresh cadence (the upstream file changes about weekly). |

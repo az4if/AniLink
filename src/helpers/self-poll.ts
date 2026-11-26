@@ -6,9 +6,9 @@ let timer: ReturnType<typeof setInterval> | null = null;
 
 /**
  * Starts a loop that pings this instance's own /health endpoint every 10
- * minutes. Only useful on Render's free web service tier, which spins the
- * instance down after 15 minutes with no inbound traffic -- a self-ping
- * counts as traffic and keeps it warm.
+ * minutes (enable with SELF_PING=true). Only useful on hosts that spin the
+ * instance down when idle, e.g. Render's free web service tier (15 minutes
+ * with no inbound traffic) -- a self-ping counts as traffic and keeps it warm.
  *
  * Not needed (and not started) on:
  *  - localhost / your own machine -- nothing sleeps
@@ -20,10 +20,10 @@ let timer: ReturnType<typeof setInterval> | null = null;
  * cron-job.org's job-ping arrives, the instance is already warm.
  */
 export function startKeepAlive(): void {
-  if (!Config.renderKeepAlive) return;
+  if (!Config.selfPing) return;
 
   if (!Config.publicUrl) {
-    console.warn('[keep-alive] RENDER_KEEP_ALIVE=true but PUBLIC_URL is empty -- skipping self-ping.');
+    console.warn('[keep-alive] SELF_PING=true but PUBLIC_URL is empty -- skipping self-ping.');
     return;
   }
 
